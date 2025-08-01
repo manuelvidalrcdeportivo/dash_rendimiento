@@ -113,5 +113,11 @@ def display_subpage(pathname, session_data):
 server = app.server
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=True)
+    import os
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 8050)),
+        debug=True,
+        use_reloader=True
+    )
 #e
