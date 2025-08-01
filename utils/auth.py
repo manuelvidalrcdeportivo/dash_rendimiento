@@ -2,10 +2,10 @@ import os
 import bcrypt
 from dotenv import load_dotenv
 
-USERS_ENV_PATH = os.path.join(os.path.dirname(__file__), '..', 'test_users.env')
-
-# Carga el archivo test_users.env
-load_dotenv(USERS_ENV_PATH, override=True)
+# Intenta cargar users.env si existe, pero no es obligatorio
+USERS_ENV_PATH = os.path.join(os.path.dirname(__file__), '..', 'users.env')
+if os.path.exists(USERS_ENV_PATH):
+    load_dotenv(USERS_ENV_PATH, override=False)  # No sobreescribir variables ya existentes
 
 def get_user_hash(username):
     """Devuelve el hash bcrypt del usuario o None si no existe."""
