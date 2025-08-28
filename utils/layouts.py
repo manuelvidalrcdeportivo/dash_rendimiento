@@ -18,19 +18,142 @@ def dashboard_layout():
                 
                 # Elementos de navegación
                 html.Div([
+                    # INICIO (cabecera clicable, sin subtítulo)
                     dbc.NavLink(
-                        [html.I(className="fas fa-home me-2"), "🏠 Inicio"],
+                        [html.I(className="fas fa-home me-2"), "INICIO"],
                         href="/inicio",
                         active="exact",
-                        className="py-3 text-white"
+                        className="py-3 text-white text-uppercase fw-bold small"
                     ),
+
+                    # FICHA DE JUGADOR (cabecera clicable, sin subtítulo)
                     dbc.NavLink(
-                        [html.I(className="fas fa-chart-line me-2"), "📈 Seguimiento de Carga"],
-                        href="/seguimiento-carga",
+                        [html.I(className="fas fa-id-card me-2"), "FICHA DE JUGADOR"],
+                        href="/ficha-jugador",
+                        active="exact",
+                        className="py-3 text-white text-uppercase fw-bold small",
+                        style={
+                            "borderTop": "1px solid rgba(255,255,255,0.2)",
+                            "paddingTop": "0.75rem"
+                        }
+                    ),
+
+                    # SEMÁFORO DE CONTROL (cabecera clicable, sin subtítulo)
+                    dbc.NavLink(
+                        [html.I(className="fas fa-traffic-light me-2"), "SEMÁFORO DE CONTROL"],
+                        href="/semaforo-control",
+                        active="exact",
+                        className="py-3 text-white text-uppercase fw-bold small",
+                        style={
+                            "borderTop": "1px solid rgba(255,255,255,0.2)",
+                            "paddingTop": "0.75rem"
+                        }
+                    ),
+
+                    # Sección agrupada colapsable: CONTROL PROCESO ENTRENAMIENTO
+                    dbc.Button(
+                        [html.I(className="fas fa-dumbbell me-2"), "CONTROL PROCESO ENTRENAMIENTO"],
+                        id="toggle-cpe",
+                        color="link",
+                        className="text-start text-uppercase fw-bold small w-100 text-white",
+                        style={
+                            "borderTop": "1px solid rgba(255,255,255,0.2)",
+                            "paddingTop": "0.75rem",
+                            "textDecoration": "none"
+                        }
+                    ),
+                    dbc.Collapse([
+                        dbc.NavLink(
+                            [html.I(className="fas fa-calendar-day me-2"), "Sesiones Microciclos"],
+                            href="/control-proceso-entrenamiento/sesiones-microciclos",
+                            active="exact",
+                            className="py-2 text-white-50 ps-4 small"
+                        ),
+                        dbc.NavLink(
+                            [html.I(className="fas fa-chart-area me-2"), "Evolutivo temporada"],
+                            href="/control-proceso-entrenamiento/evolutivo-temporada",
+                            active="exact",
+                            className="py-2 text-white-50 ps-4 small"
+                        ),
+                    ], id="collapse-cpe", is_open=False),
+
+                    # Sección agrupada colapsable: CONTROL RENDIMIENTO COMPETICION
+                    dbc.Button(
+                        [html.I(className="fas fa-trophy me-2"), "CONTROL RENDIMIENTO COMPETICION"],
+                        id="toggle-crc",
+                        color="link",
+                        className="text-start text-uppercase fw-bold small w-100 text-white",
+                        style={
+                            "borderTop": "1px solid rgba(255,255,255,0.2)",
+                            "paddingTop": "0.75rem",
+                            "textDecoration": "none"
+                        }
+                    ),
+                    dbc.Collapse([
+                        dbc.NavLink(
+                            [html.I(className="fas fa-clipboard-check me-2"), "Post Partido"],
+                            href="/rendimiento-competicion/post-partido",
+                            active="exact",
+                            className="py-2 text-white-50 ps-4 small"
+                        ),
+                        dbc.NavLink(
+                            [html.I(className="fas fa-chart-line me-2"), "Evolutivo Temporada"],
+                            href="/rendimiento-competicion/evolutivo-temporada",
+                            active="exact",
+                            className="py-2 text-white-50 ps-4 small"
+                        ),
+                    ], id="collapse-crc", is_open=False),
+
+                    # Sección agrupada colapsable: CONTROL ESTADO FUNCIONAL
+                    dbc.Button(
+                        [html.I(className="fas fa-heartbeat me-2"), "CONTROL ESTADO FUNCIONAL"],
+                        id="toggle-cef",
+                        color="link",
+                        className="text-start text-uppercase fw-bold small w-100 text-white",
+                        style={
+                            "borderTop": "1px solid rgba(255,255,255,0.2)",
+                            "paddingTop": "0.75rem",
+                            "textDecoration": "none"
+                        }
+                    ),
+                    dbc.Collapse([
+                        dbc.NavLink(
+                            [html.I(className="fas fa-running me-2"), "Capacidad Funcional"],
+                            href="/estado-funcional/capacidad",
+                            active="exact",
+                            className="py-2 text-white-50 ps-4 small"
+                        ),
+                        dbc.NavLink(
+                            [html.I(className="fas fa-user-md me-2"), "Médico"],
+                            href="/estado-funcional/medico",
+                            active="exact",
+                            className="py-2 text-white-50 ps-4 small"
+                        ),
+                        dbc.NavLink(
+                            [html.I(className="fas fa-brain me-2"), "Psicológico"],
+                            href="/estado-funcional/psicologico",
+                            active="exact",
+                            className="py-2 text-white-50 ps-4 small"
+                        ),
+                    ], id="collapse-cef", is_open=False),
+                    dbc.NavLink(
+                        [html.I(className="fas fa-tools me-2"), "🛠️ Administración"],
+                        href="/admin",
                         active="exact",
                         className="py-3 text-white"
                     ),
-                ], className="nav flex-column")
+                ], className="nav flex-column", style={"flex": "1 1 auto"}),
+
+                # Información de usuario + Logout (anclado abajo)
+                html.Div(id="sidebar-user",
+                    className="mt-3",
+                    style={
+                        "borderTop": "1px solid rgba(255,255,255,0.2)",
+                        "paddingTop": "0.75rem",
+                        "color": "rgba(255,255,255,0.85)",
+                        "fontSize": "0.9rem"
+                    }
+                )
             ], 
             className="sidebar",
             style={
@@ -42,7 +165,9 @@ def dashboard_layout():
                 "padding": "1.5rem 1rem",
                 "color": "white",
                 "width": "250px",
-                "zIndex": "1000"
+                "zIndex": "1000",
+                "display": "flex",
+                "flexDirection": "column"
             }),
             
             # Contenido principal
@@ -79,4 +204,4 @@ def standard_page(content):
             className="py-3",
             fluid=True
         )
-    ], id="page-content")
+    ])

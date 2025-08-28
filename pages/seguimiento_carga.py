@@ -17,7 +17,7 @@ from utils.db_manager import get_all_athletes
 
 # Layout principal de la sección Seguimiento de Carga
 layout = dbc.Container([
-    html.H2("📊 Seguimiento de Carga", className="page-title mb-4", style={"color": "white"}),
+    html.H2("📈 CONTROL PROCESO ENTRENAMIENTO - SESIONES-MICROCICLOS", className="page-title mb-4", style={"color": "white"}),
     
     # Card para filtros
     dbc.Card([
