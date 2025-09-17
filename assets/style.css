@@ -85,6 +85,31 @@ body.login-mode {
     padding-left: 10px;
 }
 
+/* ======= Sidebar: resalto de enlace activo (dbc.NavLink con active) ======= */
+.sidebar .nav-link.active {
+    color: #fff !important;
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    border-left: 4px solid #ffc107;
+    border-radius: 0 6px 6px 0;
+    font-weight: 700;
+}
+
+/* Hover sutil en enlaces de la barra */
+.sidebar .nav .nav-link {
+    transition: padding-left 0.15s ease, background-color 0.15s ease;
+}
+.sidebar .nav .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ======= Sidebar: resalto de cabecera de grupo activa ======= */
+.sidebar .active-group {
+    color: #fff !important;
+    background-color: rgba(255, 255, 255, 0.06) !important;
+    border-left: 4px solid #17a2b8;
+    border-radius: 0 6px 6px 0;
+}
+
 /* ================= Contenido del Dashboard ================= */
 /* El div que envuelve cada subpágina (tabs + page-wrapper) */
 .dashboard-content {

@@ -18,11 +18,14 @@ from pages.admin import layout as admin_layout
 from pages.estado_funcional_capacidad import layout as ef_capacidad_layout
 from pages.estado_funcional_medico import layout as ef_medico_layout
 from pages.estado_funcional_psicologico import layout as ef_psico_layout
+from pages.estado_funcional_antropometrico import layout as ef_antropo_layout
 # Nuevas secciones y subsecciones: CONTROL PROCESO ENTRENAMIENTO y páginas individuales
 from pages.evolutivo_temporada import layout as cpe_evolutivo_layout
 from pages.semaforo_control import layout as semaforo_layout
 from pages.competicion_post_partido import layout as crc_post_layout
 from pages.competicion_evolutivo_temporada import layout as crc_evolutivo_layout
+from pages.aprovechamiento_plantilla import layout as aprovechamiento_layout
+from pages.mapas_estilo_rendimiento import layout as mapas_estilo_layout
 # Comentamos las páginas que no usaremos por ahora
 # from pages.ficha_jugador import layout as ficha_jugador_layout
 # from pages.postpartido import layout as postpartido_layout
@@ -37,7 +40,7 @@ login_layout = html.Div(
         dbc.Card(
             dbc.CardBody([
                 html.Div(
-                    html.Img(src="/assets/escudo_depor.png", style={"height": "100px"}),
+                    html.Img(src="/assets/ESCUDO-AZUL_RGB-HD.png", style={"height": "100px"}),
                     className="text-center mb-4"
                 ),
                 html.H2("Iniciar sesión", className="text-center mb-4"),
@@ -91,10 +94,9 @@ def do_login(n_clicks, username, password):
 # -------------------- 2) mostrar login o dashboard --------------------
 @app.callback(
     Output("main-layout", "children"),
-    Input("url-login", "pathname"),
-    State("global-session-store", "data")
+    Input("global-session-store", "data")
 )
-def display_main_layout(pathname, session_data):
+def display_main_layout(session_data):
     if session_data.get("logged_in"):
         return dashboard_layout()
     return login_layout
@@ -102,48 +104,93 @@ def display_main_layout(pathname, session_data):
 # -------------------- 3) render subpáginas --------------------
 @app.callback(
     Output("page-content", "children"),
-    Input("subpage-url", "pathname"),
-    State("global-session-store", "data")
+    [Input("subpage-url", "pathname"),
+     Input("global-session-store", "data")],
+    prevent_initial_call=False
 )
 def display_subpage(pathname, session_data):
-    if not session_data.get("logged_in"):
+    if not session_data or not session_data.get("logged_in"):
         return html.Div(
             "Sesión expirada. Por favor, vuelve a iniciar sesión.",
             style={"textAlign": "center", "color": "red"}
         )
 
+    roles = session_data.get("roles", []) or []
+    
+    # Helper function to check role access
+    def has_access(required_roles):
+        if "admin" in roles or "direccion" in roles:
+            return True
+        return any(role in roles for role in required_roles)
+
     # Mostrar la página correspondiente según la ruta
     if pathname in ["/", "/inicio"]:
         return home_layout
     elif pathname == "/ficha-jugador":
-        return ficha_jugador_layout
+        if has_access(["admin", "direccion", "analista"]):
+            return ficha_jugador_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/control-proceso-entrenamiento":
         # Compatibilidad: dirigir a SESIONES-MICROCICLOS
-        return rendimiento_fisico_layout
+        if has_access(["admin", "direccion", "analista"]):
+            return rendimiento_fisico_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname in ["/rendimiento-fisico", "/seguimiento-carga"]:
         # Compatibilidad con la ruta anterior
-        return rendimiento_fisico_layout
+        if has_access(["admin", "direccion", "analista"]):
+            return rendimiento_fisico_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/control-proceso-entrenamiento/sesiones-microciclos":
-        return rendimiento_fisico_layout
+        if has_access(["admin", "direccion", "analista"]):
+            return rendimiento_fisico_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/control-proceso-entrenamiento/evolutivo-temporada":
-        return cpe_evolutivo_layout
+        if has_access(["admin", "direccion", "analista"]):
+            return cpe_evolutivo_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/chicha-jugador":
         # Alias de Ficha de Jugador
-        return ficha_jugador_layout
+        if has_access(["admin", "direccion", "analista"]):
+            return ficha_jugador_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/semaforo-control":
-        return semaforo_layout
-    elif pathname == "/rendimiento-competicion/post-partido":
-        return crc_post_layout
-    elif pathname == "/rendimiento-competicion/evolutivo-temporada":
-        return crc_evolutivo_layout
+        if has_access(["admin", "direccion", "analista"]):
+            return semaforo_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
+    elif pathname == "/control-proceso-competicion/post-partido":
+        if has_access(["admin", "direccion", "analista"]):
+            return crc_post_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
+    elif pathname == "/control-proceso-competicion/evolutivo-temporada":
+        if has_access(["admin", "direccion", "analista"]):
+            return crc_evolutivo_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
+    elif pathname == "/control-proceso-competicion/aprovechamiento-plantilla":
+        if has_access(["admin", "direccion", "analista"]):
+            return aprovechamiento_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
+    elif pathname == "/control-proceso-competicion/mapas-estilo-rendimiento":
+        if has_access(["admin", "direccion", "analista"]):
+            return mapas_estilo_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/estado-funcional/capacidad":
-        return ef_capacidad_layout
+        if has_access(["admin", "direccion", "preparador"]):
+            return ef_capacidad_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/estado-funcional/medico":
-        return ef_medico_layout
+        if has_access(["admin", "direccion", "medico"]):
+            return ef_medico_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/estado-funcional/psicologico":
-        return ef_psico_layout
+        if has_access(["admin", "direccion", "psicologo"]):
+            return ef_psico_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
+    elif pathname == "/estado-funcional/antropometrico":
+        if has_access(["admin", "direccion", "nutricion"]):
+            return ef_antropo_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/admin":
-        roles = session_data.get("roles", []) or []
+        # Solo admin puede acceder a la sección de administración/configuración
         if "admin" in roles:
             return admin_layout
         return html.Div("No autorizado. Se requiere rol admin.", className="p-4 text-danger")
@@ -154,35 +201,159 @@ def display_subpage(pathname, session_data):
 @app.callback(
     Output("collapse-cpe", "is_open"),
     Input("toggle-cpe", "n_clicks"),
+    Input("subpage-url", "pathname"),
     State("collapse-cpe", "is_open"),
-    prevent_initial_call=True
 )
-def toggle_cpe(n_clicks, is_open):
-    if n_clicks:
+def toggle_cpe(n_clicks, pathname, is_open):
+    # Mantener abierta si la URL pertenece a CPE
+    if pathname and pathname.startswith("/control-proceso-entrenamiento"):
+        return True
+    # Toggle manual por botón
+    triggered_prop = (
+        dash.callback_context.triggered[0]["prop_id"].split(".")[0]
+        if dash.callback_context.triggered else None
+    )
+    if triggered_prop == "toggle-cpe" and n_clicks:
         return not is_open
+    # Cerrar si cambiamos a otra sección
+    if pathname:
+        return False
     return is_open
+
+# -------------------- 4b) resaltar cabeceras de secciones según URL --------------------
+@app.callback(
+    Output("toggle-crc", "className"),
+    Output("toggle-cpe", "className"),
+    Output("toggle-cef", "className"),
+    Input("subpage-url", "pathname"),
+)
+def highlight_section_headers(pathname):
+    base_class = "text-start text-uppercase fw-bold small w-100 text-white"
+    active_class = base_class + " active-group"
+    crc_class = base_class
+    cpe_class = base_class
+    cef_class = base_class
+    if pathname and pathname.startswith("/rendimiento-competicion"):
+        crc_class = active_class
+    if pathname and pathname.startswith("/control-proceso-entrenamiento"):
+        cpe_class = active_class
+    if pathname and pathname.startswith("/estado-funcional"):
+        cef_class = active_class
+    return crc_class, cpe_class, cef_class
 
 @app.callback(
     Output("collapse-crc", "is_open"),
     Input("toggle-crc", "n_clicks"),
+    Input("subpage-url", "pathname"),
     State("collapse-crc", "is_open"),
-    prevent_initial_call=True
 )
-def toggle_crc(n_clicks, is_open):
-    if n_clicks:
+def toggle_crc(n_clicks, pathname, is_open):
+    # Mantener abierta si la URL pertenece a CRC (competición)
+    if pathname and pathname.startswith("/rendimiento-competicion"):
+        return True
+    # Toggle manual por botón
+    triggered_prop = (
+        dash.callback_context.triggered[0]["prop_id"].split(".")[0]
+        if dash.callback_context.triggered else None
+    )
+    if triggered_prop == "toggle-crc" and n_clicks:
         return not is_open
+    # Cerrar si cambiamos a otra sección
+    if pathname:
+        return False
     return is_open
 
 @app.callback(
     Output("collapse-cef", "is_open"),
     Input("toggle-cef", "n_clicks"),
+    Input("subpage-url", "pathname"),
     State("collapse-cef", "is_open"),
-    prevent_initial_call=True
 )
-def toggle_cef(n_clicks, is_open):
-    if n_clicks:
+def toggle_cef(n_clicks, pathname, is_open):
+    # Mantener abierta si la URL pertenece a CEF (estado funcional)
+    if pathname and pathname.startswith("/estado-funcional"):
+        return True
+    # Toggle manual por botón
+    triggered_prop = (
+        dash.callback_context.triggered[0]["prop_id"].split(".")[0]
+        if dash.callback_context.triggered else None
+    )
+    if triggered_prop == "toggle-cef" and n_clicks:
         return not is_open
+    # Cerrar si cambiamos a otra sección
+    if pathname:
+        return False
     return is_open
+
+# -------------------- 4c) Control de visibilidad del sidebar por roles --------------------
+@app.callback(
+    [Output("nav-section-crc", "style"),
+     Output("nav-section-cpe", "style"),
+     Output("nav-section-cef", "style"),
+     Output("nav-section-ficha", "style"),
+     Output("nav-section-semaforo", "style"),
+     Output("nav-section-admin", "style")],
+    Input("global-session-store", "data")
+)
+def control_sidebar_visibility(session_data):
+    default_style = {"display": "block"}
+    hidden_style = {"display": "none"}
+    
+    if not session_data or not session_data.get("logged_in"):
+        return [hidden_style] * 6
+    
+    roles = session_data.get("roles", []) or []
+    
+    # Control Proceso Competición - acceso: admin, direccion, analista
+    crc_style = default_style if any(role in roles for role in ["admin", "direccion", "analista"]) else hidden_style
+    
+    # Control Proceso Entrenamiento - acceso: admin, direccion, analista
+    cpe_style = default_style if any(role in roles for role in ["admin", "direccion", "analista"]) else hidden_style
+    
+    # Control Estado Funcional - acceso: admin, direccion, medico, nutricion, psicologo, preparador
+    cef_style = default_style if any(role in roles for role in ["admin", "direccion", "medico", "nutricion", "psicologo", "preparador"]) else hidden_style
+    
+    # Ficha Jugador - acceso: admin, direccion, analista
+    ficha_style = default_style if any(role in roles for role in ["admin", "direccion", "analista"]) else hidden_style
+    
+    # Semáforo Control - acceso: admin, direccion, analista
+    semaforo_style = default_style if any(role in roles for role in ["admin", "direccion", "analista"]) else hidden_style
+    
+    # Administración - acceso: solo admin
+    admin_style = default_style if "admin" in roles else hidden_style
+    
+    return crc_style, cpe_style, cef_style, ficha_style, semaforo_style, admin_style
+
+# -------------------- 4d) Control de visibilidad de subsecciones Estado Funcional --------------------
+@app.callback(
+    [Output("nav-subsection-medico", "style"),
+     Output("nav-subsection-antropometrico", "style"),
+     Output("nav-subsection-psicologico", "style"),
+     Output("nav-subsection-capacidad", "style")],
+    Input("global-session-store", "data")
+)
+def control_cef_subsections_visibility(session_data):
+    default_style = {"display": "block"}
+    hidden_style = {"display": "none"}
+    
+    if not session_data or not session_data.get("logged_in"):
+        return [hidden_style] * 4
+    
+    roles = session_data.get("roles", []) or []
+    
+    # Médico - acceso: admin, direccion, medico
+    medico_style = default_style if any(role in roles for role in ["admin", "direccion", "medico"]) else hidden_style
+    
+    # Antropométrico - acceso: admin, direccion, nutricion
+    antropometrico_style = default_style if any(role in roles for role in ["admin", "direccion", "nutricion"]) else hidden_style
+    
+    # Psicológico - acceso: admin, direccion, psicologo
+    psicologico_style = default_style if any(role in roles for role in ["admin", "direccion", "psicologo"]) else hidden_style
+    
+    # Capacidad - acceso: admin, direccion, preparador
+    capacidad_style = default_style if any(role in roles for role in ["admin", "direccion", "preparador"]) else hidden_style
+    
+    return medico_style, antropometrico_style, psicologico_style, capacidad_style
 
 # -------------------- 5) info de usuario en sidebar + logout --------------------
 @app.callback(

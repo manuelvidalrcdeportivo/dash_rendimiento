@@ -405,3 +405,200 @@ def get_variable_thresholds(variable_name):
         print(f"Error al obtener umbrales: {e}")
         # Devolver un DataFrame vacío en caso de error
         return pd.DataFrame(columns=['dia', 'min_value', 'max_value'])
+
+# --------------------------------------
+# FUNCIONES PARA SOCCER SYSTEM (MÉDICO)
+# --------------------------------------
+
+def get_soccer_db_connection():
+    """
+    Crea y retorna una conexión a la base de datos soccersystem.
+    """
+    # Configuración de credenciales desde el archivo .env
+    DB_CONFIG = {
+        'user': os.getenv('DB_USER'),
+        'password': os.getenv('DB_PASSWORD'),
+        'host': os.getenv('DB_HOST'),
+        'database': os.getenv('SOCCER_DB_NAME')  # soccersystem
+    }
+    
+    # Crear la URL de conexión
+    db_url = f"mysql+pymysql://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}/{DB_CONFIG['database']}"
+    
+    try:
+        engine = create_engine(db_url)
+        return engine
+    except Exception as e:
+        print(f"Error conectando a soccersystem: {e}")
+        return None
+
+def get_fechas_entrenamiento_disponibles():
+    """
+    Obtiene todas las fechas de entrenamiento disponibles ordenadas de más reciente a más antigua.
+    
+    Returns:
+        list: Lista de fechas ordenadas descendentemente
+    """
+    try:
+        engine = get_soccer_db_connection()
+        if engine is None:
+            return []
+        
+        query = """
+        SELECT DISTINCT fecha_entrenamiento 
+        FROM medico_mejuto 
+        ORDER BY fecha_entrenamiento DESC
+        """
+        
+        df = pd.read_sql(query, engine)
+        return df['fecha_entrenamiento'].tolist()
+        
+    except Exception as e:
+        print(f"Error obteniendo fechas: {e}")
+        return []
+
+def get_evaluaciones_medicas(fecha_entrenamiento):
+    """
+    Obtiene todas las evaluaciones médicas para una fecha específica.
+    """
+    try:
+        # Obtener conexión
+        engine = get_soccer_db_connection()
+        if engine is None:
+            return pd.DataFrame()
+        
+        query = """
+        SELECT 
+            COALESCE(m.nombre_pedrosa, mm.nombre_jugador) as nombre_jugador,
+            mm.evaluacion,
+            mm.comentarios_evaluacion,
+            mm.observaciones
+        FROM medico_mejuto mm
+        LEFT JOIN mapeo_nombre_dni m ON mm.nombre_jugador COLLATE utf8mb4_unicode_ci = m.nombre_mejuto COLLATE utf8mb4_unicode_ci
+        WHERE mm.fecha_entrenamiento = %s
+        ORDER BY COALESCE(m.nombre_pedrosa, mm.nombre_jugador)
+        """
+        
+        df = pd.read_sql(query, engine, params=(fecha_entrenamiento,))
+        
+        # Rellenar valores nulos con cadena vacía
+        df = df.fillna('')
+        
+        return df
+    except Exception as e:
+        print(f"Error obteniendo evaluaciones médicas: {e}")
+        return pd.DataFrame()
+
+def get_historico_evaluaciones_completo():
+    """
+    Obtiene todas las evaluaciones médicas históricas para análisis evolutivo con nombres unificados
+    """
+    try:
+        # Obtener conexión
+        engine = get_soccer_db_connection()
+        if engine is None:
+            return pd.DataFrame()
+        
+        query = """
+        SELECT 
+            mm.fecha_entrenamiento,
+            COALESCE(m.nombre_pedrosa, mm.nombre_jugador) as nombre_jugador,
+            mm.evaluacion,
+            mm.comentarios_evaluacion,
+            mm.observaciones
+        FROM medico_mejuto mm
+        LEFT JOIN mapeo_nombre_dni m ON mm.nombre_jugador COLLATE utf8mb4_unicode_ci = m.nombre_mejuto COLLATE utf8mb4_unicode_ci
+        WHERE mm.evaluacion IS NOT NULL
+        ORDER BY mm.fecha_entrenamiento DESC, COALESCE(m.nombre_pedrosa, mm.nombre_jugador) ASC
+        """
+        
+        df = pd.read_sql_query(query, engine)
+        engine.dispose()
+        
+        return df
+    except Exception as e:
+        print(f"Error obteniendo histórico de evaluaciones: {e}")
+        return pd.DataFrame()
+
+def get_estadisticas_por_jugador():
+    """
+    Calcula estadísticas de días por estado para cada jugador
+    """
+    try:
+        df_historico = get_historico_evaluaciones_completo()
+        if df_historico.empty:
+            return pd.DataFrame()
+        
+        # Contar días por jugador y evaluación
+        stats = df_historico.groupby(['nombre_jugador', 'evaluacion']).size().reset_index(name='dias')
+        
+        # Calcular total de días por jugador
+        total_dias = df_historico.groupby('nombre_jugador').size().reset_index(name='total_dias')
+        
+        # Merge y calcular porcentajes
+        stats = stats.merge(total_dias, on='nombre_jugador')
+        stats['porcentaje'] = (stats['dias'] / stats['total_dias'] * 100).round(1)
+        
+        # Pivot para tener columnas por estado
+        stats_pivot = stats.pivot(index='nombre_jugador', columns='evaluacion', values='porcentaje').fillna(0)
+        
+        # Asegurar que todas las columnas estén presentes
+        for estado in ['Normal', 'Precaución', 'Fisio/RTP']:
+            if estado not in stats_pivot.columns:
+                stats_pivot[estado] = 0.0
+        
+        # Reordenar columnas
+        stats_pivot = stats_pivot[['Normal', 'Precaución', 'Fisio/RTP']]
+        stats_pivot = stats_pivot.reset_index()
+        
+        return stats_pivot
+    except Exception as e:
+        print(f"Error calculando estadísticas por jugador: {e}")
+        return pd.DataFrame()
+
+def get_evolucion_jugador(nombre_jugador):
+    """
+    Obtiene la evolución temporal de un jugador específico
+    """
+    try:
+        df_historico = get_historico_evaluaciones_completo()
+        if df_historico.empty:
+            return pd.DataFrame()
+        
+        # Filtrar por jugador
+        df_jugador = df_historico[df_historico['nombre_jugador'] == nombre_jugador].copy()
+        
+        if df_jugador.empty:
+            return pd.DataFrame()
+        
+        # Mapear evaluaciones a valores numéricos para el gráfico
+        evaluacion_map = {
+            'Fisio/RTP': 1,
+            'Precaución': 2, 
+            'Normal': 3
+        }
+        
+        df_jugador['valor_numerico'] = df_jugador['evaluacion'].map(evaluacion_map)
+        
+        # Ordenar por fecha
+        df_jugador = df_jugador.sort_values('fecha_entrenamiento')
+        
+        return df_jugador
+    except Exception as e:
+        print(f"Error obteniendo evolución del jugador: {e}")
+        return pd.DataFrame()
+
+def get_lista_jugadores():
+    """
+    Obtiene la lista de jugadores únicos con evaluaciones
+    """
+    try:
+        df_historico = get_historico_evaluaciones_completo()
+        if df_historico.empty:
+            return []
+        
+        jugadores = sorted(df_historico['nombre_jugador'].unique().tolist())
+        return jugadores
+    except Exception as e:
+        print(f"Error obteniendo lista de jugadores: {e}")
+        return []

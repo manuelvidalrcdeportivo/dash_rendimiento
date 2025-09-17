@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from config import DATABASE_URL
 
 # Roles por defecto sugeridos
-DEFAULT_ROLES = ["admin", "preparador", "nutricion", "medico", "analista"]
+DEFAULT_ROLES = ["admin", "direccion", "preparador", "nutricion", "medico", "analista", "psicologo"]
 
 _engine: Optional[Engine] = None
 
