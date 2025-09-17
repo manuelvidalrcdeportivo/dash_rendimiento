@@ -414,22 +414,34 @@ def get_soccer_db_connection():
     """
     Crea y retorna una conexión a la base de datos soccersystem.
     """
+    # Asegurar que las variables de entorno están cargadas
+    load_dotenv()
+    
     # Configuración de credenciales desde el archivo .env
     DB_CONFIG = {
-        'user': os.getenv('DB_USER'),
-        'password': os.getenv('DB_PASSWORD'),
-        'host': os.getenv('DB_HOST'),
-        'database': os.getenv('SOCCER_DB_NAME')  # soccersystem
+        'user': os.getenv('SOCCER_DB_USER', os.getenv('DB_USER')),
+        'password': os.getenv('SOCCER_DB_PASSWORD', os.getenv('DB_PASSWORD')),
+        'host': os.getenv('SOCCER_DB_HOST', os.getenv('DB_HOST')),
+        'database': os.getenv('SOCCER_DB_NAME', 'soccersystem')  # soccersystem
     }
+    
+    # Validar que tenemos las credenciales necesarias
+    if not all(DB_CONFIG.values()):
+        print(f"Error: Faltan credenciales de BD. Config: {DB_CONFIG}")
+        return None
     
     # Crear la URL de conexión
     db_url = f"mysql+pymysql://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}/{DB_CONFIG['database']}"
     
     try:
         engine = create_engine(db_url)
+        # Probar la conexión
+        with engine.connect() as conn:
+            pass
         return engine
     except Exception as e:
         print(f"Error conectando a soccersystem: {e}")
+        print(f"URL de conexión (sin credenciales): mysql+pymysql://*:*@{DB_CONFIG['host']}/{DB_CONFIG['database']}")
         return None
 
 def get_fechas_entrenamiento_disponibles():
@@ -440,8 +452,10 @@ def get_fechas_entrenamiento_disponibles():
         list: Lista de fechas ordenadas descendentemente
     """
     try:
+        print("Intentando obtener fechas de entrenamiento...")
         engine = get_soccer_db_connection()
         if engine is None:
+            print("Error: No se pudo obtener conexión a la BD soccersystem")
             return []
         
         query = """
@@ -450,11 +464,16 @@ def get_fechas_entrenamiento_disponibles():
         ORDER BY fecha_entrenamiento DESC
         """
         
+        print(f"Ejecutando query: {query}")
         df = pd.read_sql(query, engine)
-        return df['fecha_entrenamiento'].tolist()
+        fechas = df['fecha_entrenamiento'].tolist()
+        print(f"Fechas obtenidas: {len(fechas)} - Primeras 3: {fechas[:3] if fechas else 'Ninguna'}")
+        return fechas
         
     except Exception as e:
         print(f"Error obteniendo fechas: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def get_evaluaciones_medicas(fecha_entrenamiento):
@@ -462,9 +481,11 @@ def get_evaluaciones_medicas(fecha_entrenamiento):
     Obtiene todas las evaluaciones médicas para una fecha específica.
     """
     try:
+        print(f"Obteniendo evaluaciones médicas para fecha: {fecha_entrenamiento}")
         # Obtener conexión
         engine = get_soccer_db_connection()
         if engine is None:
+            print("Error: No se pudo obtener conexión a la BD soccersystem")
             return pd.DataFrame()
         
         query = """
@@ -479,7 +500,9 @@ def get_evaluaciones_medicas(fecha_entrenamiento):
         ORDER BY COALESCE(m.nombre_pedrosa, mm.nombre_jugador)
         """
         
+        print(f"Ejecutando query con fecha: {fecha_entrenamiento}")
         df = pd.read_sql(query, engine, params=(fecha_entrenamiento,))
+        print(f"Evaluaciones obtenidas: {len(df)} registros")
         
         # Rellenar valores nulos con cadena vacía
         df = df.fillna('')
@@ -487,6 +510,8 @@ def get_evaluaciones_medicas(fecha_entrenamiento):
         return df
     except Exception as e:
         print(f"Error obteniendo evaluaciones médicas: {e}")
+        import traceback
+        traceback.print_exc()
         return pd.DataFrame()
 
 def get_historico_evaluaciones_completo():
