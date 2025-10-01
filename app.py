@@ -23,7 +23,7 @@ from pages.estado_funcional_antropometrico import layout as ef_antropo_layout
 from pages.evolutivo_temporada import layout as cpe_evolutivo_layout
 from pages.semaforo_control import layout as semaforo_layout
 from pages.competicion_post_partido import layout as crc_post_layout
-from pages.competicion_evolutivo_temporada import layout as crc_evolutivo_layout
+from pages.competicion_evolutivo_temporada import layout as crc_evolutivo_layout_func
 from pages.aprovechamiento_plantilla import layout as aprovechamiento_layout
 from pages.mapas_estilo_rendimiento import layout as mapas_estilo_layout
 # Comentamos las páginas que no usaremos por ahora
@@ -163,7 +163,7 @@ def display_subpage(pathname, session_data):
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/control-proceso-competicion/evolutivo-temporada":
         if has_access(["admin", "direccion", "analista"]):
-            return crc_evolutivo_layout
+            return crc_evolutivo_layout_func()
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/control-proceso-competicion/aprovechamiento-plantilla":
         if has_access(["admin", "direccion", "analista"]):
@@ -249,7 +249,7 @@ def highlight_section_headers(pathname):
 )
 def toggle_crc(n_clicks, pathname, is_open):
     # Mantener abierta si la URL pertenece a CRC (competición)
-    if pathname and pathname.startswith("/rendimiento-competicion"):
+    if pathname and pathname.startswith("/control-proceso-competicion"):
         return True
     # Toggle manual por botón
     triggered_prop = (

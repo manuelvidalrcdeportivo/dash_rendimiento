@@ -1,0 +1,104 @@
+/* Tooltips personalizados para el heatmap - Estilo Visual Mejorado */
+.heatmap-cell {
+    position: relative;
+}
+
+/* Tooltip visible al hacer hover */
+.heatmap-cell:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 500;
+    white-space: nowrap;
+    z-index: 10000;
+    pointer-events: none;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Flecha del tooltip */
+.heatmap-cell:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 7px solid transparent;
+    border-top-color: #2c3e50;
+    z-index: 10000;
+    pointer-events: none;
+}
+
+/* Animación suave */
+.heatmap-cell::after,
+.heatmap-cell::before {
+    opacity: 0;
+    transition: opacity 0.15s ease-in-out;
+}
+
+.heatmap-cell:hover::after,
+.heatmap-cell:hover::before {
+    opacity: 1;
+}
+
+/* Efecto de brillo en celda al hover */
+.heatmap-cell:hover {
+    filter: brightness(1.15);
+    transition: filter 0.1s ease;
+}
+
+/* Hover effect en bloques interactivos - TODOS */
+[id^='heatmap-block'] {
+    transition: all 0.2s ease;
+}
+
+[id^='heatmap-block']:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+    filter: brightness(1.05);
+}
+
+/* Hover effect en bloques de sección (expandidos y colapsados) */
+.heatmap-section-block {
+    transition: all 0.2s ease;
+}
+
+.heatmap-section-block:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+    filter: brightness(1.05);
+}
+
+/* Estilos para el loader/spinner */
+#loading-heatmap {
+    min-height: 400px;
+}
+
+/* Efecto de carga en el contenedor */
+#custom-heatmap-container {
+    transition: opacity 0.3s ease;
+}
+
+/* Animación sutil durante la actualización */
+@keyframes pulse-border {
+    0%, 100% { border-color: rgba(0, 0, 0, 0.1); }
+    50% { border-color: rgba(0, 123, 255, 0.3); }
+}
+
+.heatmap-section-block:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+}
+
+[id^='heatmap-block']:active {
+    transform: scale(0.98) translateY(-2px);
+    transition: transform 0.1s ease;
+}

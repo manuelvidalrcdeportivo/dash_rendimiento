@@ -1,0 +1,48 @@
+/* Estilos para el selector premium de equipos */
+
+.team-shield:hover {
+    transform: scale(1.15) !important;
+    box-shadow: 0 6px 16px rgba(0, 123, 255, 0.3) !important;
+    border-color: rgba(0, 123, 255, 0.5) !important;
+}
+
+.team-shield:active {
+    transform: scale(1.05) !important;
+}
+
+/* Estilos para el scrollbar horizontal (webkit) */
+::-webkit-scrollbar {
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #007bff;
+    border-radius: 4px;
+    transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #0056b3;
+}
+
+/* Animación suave para la leyenda flotante */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Aplicar animación a la leyenda */
+.legend-container {
+    animation: fadeInUp 0.5s ease;
+}

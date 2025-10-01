@@ -407,6 +407,340 @@ def get_variable_thresholds(variable_name):
         return pd.DataFrame(columns=['dia', 'min_value', 'max_value'])
 
 # --------------------------------------
+# FUNCIONES PARA LALIGA DATABASE
+# --------------------------------------
+
+def get_laliga_db_connection():
+    """
+    Crea y retorna una conexión a la base de datos LaLiga.
+    """
+    # Asegurar que las variables de entorno están cargadas
+    load_dotenv()
+    
+    # Configuración de credenciales desde el archivo .env
+    DB_CONFIG = {
+        'user': os.getenv('LALIGA_DB_USER', os.getenv('DB_USER')),
+        'password': os.getenv('LALIGA_DB_PASSWORD', os.getenv('DB_PASSWORD')),
+        'host': os.getenv('LALIGA_DB_HOST', os.getenv('DB_HOST')),
+        'database': os.getenv('LALIGA_DB_NAME', 'laliga')  # laliga por defecto
+    }
+    
+    # Validar que tenemos las credenciales necesarias
+    if not all(DB_CONFIG.values()):
+        print(f"Error: Faltan credenciales de BD LaLiga. Config: {DB_CONFIG}")
+        return None
+    
+    # Crear la URL de conexión
+    db_url = f"mysql+pymysql://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}/{DB_CONFIG['database']}"
+    
+    try:
+        engine = create_engine(db_url)
+        # Probar la conexión
+        with engine.connect() as conn:
+            pass
+        return engine
+    except Exception as e:
+        print(f"Error conectando a LaLiga: {e}")
+        print(f"URL de conexión (sin credenciales): mysql+pymysql://*:*@{DB_CONFIG['host']}/{DB_CONFIG['database']}")
+        return None
+
+def get_indicadores_rendimiento_laliga(team_name="RC Deportivo"):
+    """
+    Obtiene los indicadores de rendimiento desde la base de datos LaLiga para un equipo específico.
+    Transforma los datos al formato estándar (metrica, valor, ranking).
+    
+    Args:
+        team_name (str): Nombre del equipo (por defecto "RC Deportivo")
+    
+    Returns:
+        DataFrame con columnas: metrica, valor, ranking
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return pd.DataFrame(columns=['metrica', 'valor', 'ranking'])
+        
+        # Verificar si la tabla existe
+        inspector = inspect(engine)
+        if 'indicadores_rendimiento' not in inspector.get_table_names():
+            return pd.DataFrame(columns=['metrica', 'valor', 'ranking'])
+        
+        # Consulta para obtener datos del equipo en formato estándar
+        query = """
+        SELECT 
+            metric_name as metrica,
+            CONCAT(metric_value, 
+                   CASE 
+                       WHEN metric_unit IS NOT NULL AND metric_unit != 'Unknown' 
+                       THEN CONCAT(' ', metric_unit)
+                       ELSE ''
+                   END) as valor,
+            ranking_position as ranking
+        FROM indicadores_rendimiento 
+        WHERE team_name = %s
+        ORDER BY metric_category, metric_name
+        """
+        
+        df = pd.read_sql(query, engine, params=(team_name,))
+        
+        if not df.empty:
+            # Limpieza de datos
+            df['ranking'] = pd.to_numeric(df['ranking'], errors='coerce').astype('Int64')
+            df = df.dropna(subset=['metrica', 'ranking'])
+        
+        return df
+        
+    except Exception as e:
+        pass
+        return pd.DataFrame(columns=['metrica', 'valor', 'ranking'])
+
+def get_available_teams_laliga():
+    """
+    Obtiene la lista de equipos disponibles en la tabla indicadores_rendimiento de LaLiga.
+    
+    Returns:
+        list: Lista de nombres de equipos únicos
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return []
+        
+        # Verificar si la tabla existe
+        inspector = inspect(engine)
+        if 'indicadores_rendimiento' not in inspector.get_table_names():
+            return []
+        
+        query = "SELECT DISTINCT team_name FROM indicadores_rendimiento ORDER BY team_name"
+        df = pd.read_sql(query, engine)
+        teams = df['team_name'].tolist()
+        print(f"Equipos disponibles: {teams}")
+        return teams
+        
+    except Exception as e:
+        print(f"Error obteniendo equipos disponibles: {e}")
+        return []
+
+def get_available_metrics_laliga(team_name="RC Deportivo"):
+    """
+    Obtiene las métricas disponibles para un equipo específico en LaLiga.
+    
+    Args:
+        team_name (str): Nombre del equipo
+    
+    Returns:
+        list: Lista de métricas disponibles para el equipo
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return []
+        
+        # Verificar si la tabla existe
+        inspector = inspect(engine)
+        if 'indicadores_rendimiento' not in inspector.get_table_names():
+            return []
+        
+        # Obtener los nombres de métricas únicos para el equipo
+        query = """
+        SELECT DISTINCT metric_name 
+        FROM indicadores_rendimiento 
+        WHERE team_name = %s 
+        ORDER BY metric_name
+        """
+        df = pd.read_sql(query, engine, params=(team_name,))
+        metrics = df['metric_name'].tolist()
+        
+        print(f"Métricas disponibles para {team_name}: {len(metrics)} métricas")
+        return metrics
+        
+    except Exception as e:
+        print(f"Error obteniendo métricas disponibles: {e}")
+        return []
+
+def get_metrics_by_category_laliga(team_name="RC Deportivo"):
+    """
+    Obtiene las métricas agrupadas por categoría para un equipo específico.
+    
+    Args:
+        team_name (str): Nombre del equipo
+    
+    Returns:
+        dict: Diccionario con categorías como claves y listas de métricas como valores
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return {}
+        
+        query = """
+        SELECT 
+            metric_category,
+            metric_name,
+            ranking_position
+        FROM indicadores_rendimiento 
+        WHERE team_name = %s 
+        ORDER BY metric_category, metric_name
+        """
+        df = pd.read_sql(query, engine, params=(team_name,))
+        
+        if df.empty:
+            return {}
+        
+        # Agrupar por categoría
+        categories = {}
+        for category in df['metric_category'].unique():
+            category_metrics = df[df['metric_category'] == category]['metric_name'].tolist()
+            categories[category] = category_metrics
+        
+        return categories
+        
+    except Exception as e:
+        print(f"Error obteniendo métricas por categoría: {e}")
+        return {}
+
+def get_all_teams_ranking_by_metric_laliga(metric_name):
+    """
+    Obtiene el ranking de todos los equipos para una métrica específica.
+    
+    Args:
+        metric_name (str): Nombre de la métrica
+    
+    Returns:
+        dict: Diccionario con ranking_position como clave y team_name como valor
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return {}
+        
+        query = """
+        SELECT 
+            team_name,
+            ranking_position,
+            metric_value
+        FROM indicadores_rendimiento 
+        WHERE metric_name = %s 
+        ORDER BY ranking_position
+        """
+        df = pd.read_sql(query, engine, params=(metric_name,))
+        
+        if df.empty:
+            return {}
+        
+        # Crear diccionario ranking -> equipo
+        ranking_dict = {}
+        for _, row in df.iterrows():
+            ranking_dict[int(row['ranking_position'])] = {
+                'team': row['team_name'],
+                'value': row['metric_value']
+            }
+        
+        return ranking_dict
+        
+    except Exception as e:
+        print(f"Error obteniendo ranking por métrica: {e}")
+        return {}
+
+def get_all_teams_rankings_laliga(metric_names):
+    """
+    Obtiene el ranking de todos los equipos para múltiples métricas.
+    
+    Args:
+        metric_names (list): Lista de nombres de métricas
+    
+    Returns:
+        dict: Diccionario anidado {metric_name: {ranking: {team, value}}}
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return {}
+        
+        # Crear placeholders para la consulta IN
+        placeholders = ','.join(['%s'] * len(metric_names))
+        query = f"""
+        SELECT 
+            metric_name,
+            team_name,
+            ranking_position,
+            metric_value
+        FROM indicadores_rendimiento 
+        WHERE metric_name IN ({placeholders})
+        ORDER BY metric_name, ranking_position
+        """
+        
+        df = pd.read_sql(query, engine, params=tuple(metric_names))
+        
+        if df.empty:
+            return {}
+        
+        # Crear diccionario anidado
+        rankings_dict = {}
+        for _, row in df.iterrows():
+            metric = row['metric_name']
+            ranking = int(row['ranking_position'])
+            
+            if metric not in rankings_dict:
+                rankings_dict[metric] = {}
+            
+            rankings_dict[metric][ranking] = {
+                'team': row['team_name'],
+                'value': row['metric_value']
+            }
+        
+        return rankings_dict
+        
+    except Exception as e:
+        print(f"Error obteniendo rankings múltiples: {e}")
+        return {}
+
+def get_rankings_compuestos_laliga(team_name="RC Deportivo"):
+    """
+    Obtiene los rankings compuestos específicos (RankingEstilo, RankingOfensivo, etc.) 
+    para un equipo desde la base de datos LaLiga.
+    
+    Args:
+        team_name (str): Nombre del equipo (por defecto "RC Deportivo")
+    
+    Returns:
+        dict: Diccionario con {metric_id: ranking_position} para los rankings compuestos
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return {}
+        
+        # Verificar si la tabla existe
+        inspector = inspect(engine)
+        if 'indicadores_rendimiento' not in inspector.get_table_names():
+            return {}
+        
+        # Consulta para obtener solo los rankings compuestos
+        query = """
+        SELECT 
+            metric_id,
+            ranking_position
+        FROM indicadores_rendimiento 
+        WHERE team_name = %s 
+        AND metric_category IN ('RANKINGS COMPUESTOS', 'RANKING GLOBAL')
+        ORDER BY metric_id
+        """
+        
+        df = pd.read_sql(query, engine, params=(team_name,))
+        
+        if not df.empty:
+            # Convertir a diccionario
+            rankings_dict = dict(zip(df['metric_id'], df['ranking_position']))
+            return rankings_dict
+        else:
+            return {}
+        
+    except Exception as e:
+        pass
+        return {}
+
+# --------------------------------------
 # FUNCIONES PARA SOCCER SYSTEM (MÉDICO)
 # --------------------------------------
 
@@ -627,3 +961,101 @@ def get_lista_jugadores():
     except Exception as e:
         print(f"Error obteniendo lista de jugadores: {e}")
         return []
+
+
+def get_full_section_ranking(ranking_id: str):
+    """
+    Obtiene el ranking completo de todos los equipos para una sección específica.
+    
+    Args:
+        ranking_id: ID del ranking (ej: 'RankingEstilo', 'RankingOfensivo', etc.)
+    
+    Returns:
+        Lista de diccionarios con team_name, ranking_position, section_name
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return get_full_section_ranking_fallback(ranking_id)
+        
+        # Verificar si la tabla existe
+        inspector = inspect(engine)
+        if 'indicadores_rendimiento' not in inspector.get_table_names():
+            return get_full_section_ranking_fallback(ranking_id)
+        
+        # Consultar el ranking completo para la sección específica
+        query = """
+        SELECT team_name, ranking_position, metric_id
+        FROM indicadores_rendimiento 
+        WHERE metric_id = %s 
+        ORDER BY ranking_position ASC
+        """
+        
+        df = pd.read_sql(query, engine, params=(ranking_id,))
+        
+        if df.empty:
+            print(f"No se encontraron datos para {ranking_id}")
+            return get_full_section_ranking_fallback(ranking_id)
+        
+        # Mapear metric_id a nombre de sección
+        id_to_section = {
+            'RankingEstilo': 'ESTILO',
+            'RankingOfensivo': 'RENDIMIENTO OFENSIVO',
+            'RankingDefensivo': 'RENDIMIENTO DEFENSIVO', 
+            'RankingFísico': 'RENDIMIENTO FÍSICO',
+            'RankingBalónParado': 'BALÓN PARADO',
+            'RankingGlobal': 'RENDIMIENTO GLOBAL'
+        }
+        
+        section_name = id_to_section.get(ranking_id, ranking_id)
+        
+        ranking_data = []
+        for _, row in df.iterrows():
+            ranking_data.append({
+                'team_name': row['team_name'],
+                'ranking_position': int(row['ranking_position']),
+                'section_name': section_name
+            })
+        
+        print(f"✅ Obtenido ranking completo para {ranking_id}: {len(ranking_data)} equipos")
+        return ranking_data
+        
+    except Exception as e:
+        print(f"Error en get_full_section_ranking: {e}")
+        return get_full_section_ranking_fallback(ranking_id)
+
+
+def get_full_section_ranking_fallback(ranking_id: str):
+    """Datos de fallback para el ranking completo de una sección"""
+    
+    # Simulamos datos de ejemplo para La Liga (22 equipos)
+    teams = [
+        "FC Barcelona", "Real Madrid", "Atlético Madrid", "RC Deportivo", 
+        "Real Sociedad", "Athletic Club", "Valencia CF", "Sevilla FC",
+        "Real Betis", "Villarreal CF", "Getafe CF", "Osasuna",
+        "Celta Vigo", "Las Palmas", "Rayo Vallecano", "Alavés",
+        "Mallorca", "Girona FC", "Leganes", "Espanyol",
+        "Valladolid", "Almería"
+    ]
+    
+    id_to_section = {
+        'RankingEstilo': 'ESTILO',
+        'RankingOfensivo': 'RENDIMIENTO OFENSIVO',
+        'RankingDefensivo': 'RENDIMIENTO DEFENSIVO', 
+        'RankingFísico': 'RENDIMIENTO FÍSICO',
+        'RankingBalónParado': 'BALÓN PARADO',
+        'RankingGlobal': 'RENDIMIENTO GLOBAL'
+    }
+    
+    section_name = id_to_section.get(ranking_id, ranking_id)
+    
+    ranking_data = []
+    for i, team in enumerate(teams, 1):
+        ranking_data.append({
+            'team_name': team,
+            'ranking_position': i,
+            'section_name': section_name
+        })
+    
+    print(f"⚠️ Usando datos fallback para {ranking_id}")
+    return ranking_data

@@ -182,22 +182,76 @@ def get_entrenamiento_status():
 
 def get_competicion_status():
     """
-    Estado rendimiento competición - lee datos del evolutivo temporada
-    TODO: Implementar lógica real cuando estén disponibles los datos
+    Estado rendimiento competición - basado en el Ranking Global de indicadores de rendimiento
+    Usa la misma lógica de colores que evolutivo temporada:
+    - Ranking 1-6: Verde (ÓPTIMO)
+    - Ranking 7-16: Amarillo (VIGILANCIA)
+    - Ranking 17-22: Rojo (CRÍTICO)
     """
     try:
-        # TODO: Aquí se debería leer el estado del "Control Proceso Competición -> Evolutivo temporada"
-        # Por ahora retornamos en desarrollo hasta tener acceso a esos datos
+        from utils.db_manager import get_laliga_db_connection
+        import pandas as pd
+        
+        # Obtener el ranking global desde indicadores_rendimiento
+        engine = get_laliga_db_connection()
+        
+        if not engine:
+            return {
+                'color': '#6c757d',
+                'estado': 'SIN DATOS',
+                'detalle': 'No se puede conectar a la base de datos'
+            }
+        
+        query = """
+        SELECT 
+            team_name,
+            ranking_position,
+            metric_value
+        FROM indicadores_rendimiento 
+        WHERE metric_id = 'RankingGlobal'
+        AND team_name = 'RC Deportivo'
+        """
+        
+        df = pd.read_sql(query, engine)
+        
+        if df.empty:
+            return {
+                'color': '#6c757d',
+                'estado': 'SIN DATOS',
+                'detalle': 'No hay datos de Ranking Global disponibles'
+            }
+        
+        ranking = int(df.iloc[0]['ranking_position'])
+        valor = df.iloc[0]['metric_value']
+        
+        # Aplicar la misma lógica de colores que evolutivo temporada (pero con colores unificados del semáforo)
+        if ranking <= 6:
+            color = '#28a745'  # Verde oscuro (igual que nutrición/médico)
+            estado = 'ÓPTIMO'
+            descripcion = f'Ranking Global: {ranking}º posición (Top 6)'
+        elif ranking <= 16:
+            color = '#ffc107'  # Amarillo (igual que nutrición/médico)
+            estado = 'VIGILANCIA'
+            descripcion = f'Ranking Global: {ranking}º posición (Medio-Alto)'
+        else:
+            color = '#dc3545'  # Rojo (igual que nutrición/médico)
+            estado = 'CRÍTICO'
+            descripcion = f'Ranking Global: {ranking}º posición (Descenso)'
+        
         return {
-            'color': '#6c757d',  # Gris - pendiente implementación
-            'estado': 'PENDIENTE',
-            'detalle': 'Leerá datos de Evolutivo Temporada (pendiente implementar)'
+            'color': color,
+            'estado': estado,
+            'detalle': descripcion
         }
+        
     except Exception as e:
+        print(f"Error calculando estado competición: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             'color': '#6c757d',
             'estado': 'ERROR',
-            'detalle': f'Error accediendo datos competición: {str(e)}'
+            'detalle': f'Error al calcular estado: {str(e)}'
         }
 
 
