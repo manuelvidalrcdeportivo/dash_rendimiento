@@ -496,7 +496,7 @@ def build_ranking_heatmap(df: pd.DataFrame, selected_view='expanded', collapsed_
         paper_bgcolor='white',
         # Añadir escudo del RC Deportivo en la esquina superior izquierda
         images=[dict(
-            source="/assets/escudos/RC Deportivo.png",
+            source="/assets/Escudos/RC Deportivo.png",
             xref="paper", yref="paper",
             x=0.01, y=0.99,  # Posición superior izquierda
             sizex=0.08, sizey=0.08,  # Tamaño del escudo
@@ -1323,7 +1323,7 @@ def team_selector_premium():
         escudos_items.append(
             html.Div(
                 html.Img(
-                    src=f'/assets/escudos/{equipo}.png',
+                    src=f'/assets/Escudos/{equipo}.png',
                     id={'type': 'team-shield', 'team': equipo},
                     className='team-shield',
                     title=equipo,
@@ -1661,7 +1661,7 @@ clientside_callback(
                 // Crear escudo temporalmente para la captura
                 const shield = document.createElement('img');
                 shield.id = 'temp-shield-for-capture';
-                shield.src = '/assets/escudos/' + teamName + '.png';
+                shield.src = '/assets/Escudos/' + teamName + '.png';
                 shield.style.position = 'absolute';
                 shield.style.top = '10px';
                 shield.style.right = '10px';

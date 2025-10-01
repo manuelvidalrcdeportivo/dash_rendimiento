@@ -181,7 +181,7 @@ def create_scatter_plot(metric_x, metric_y, label_x, label_y, invert_y=False):
         size_multiplier = 1.0
         
         images.append(dict(
-            source=f'/assets/escudos/{team}.png',
+            source=f'/assets/Escudos/{team}.png',
             xref="x",
             yref="y",
             x=x_val,
