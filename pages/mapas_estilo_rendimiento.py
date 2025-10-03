@@ -712,10 +712,10 @@ def update_scatter_block(n_clicks_list, current_option, block_id, option_values)
             )
         elif selected_option == "balon_parado":
             scatter_content = create_scatter_plot(
-                metric_x="TeamGoalsSetPlay",
-                metric_y="TeamGoalsAgainstSetPlay",
-                label_x="Goles BP a Favor",
-                label_y="Goles BP en Contra",
+                metric_x="TeamGoalsSetPlayNoPenalty",
+                metric_y="TeamGoalsAgainstSetPlayNoPenalty",
+                label_x="Goles ABP a Favor sin Penaltis ",
+                label_y="Goles ABP en Contra sin Penaltis",
                 invert_y=True
             )
         else:
@@ -725,18 +725,18 @@ def update_scatter_block(n_clicks_list, current_option, block_id, option_values)
     elif block_id == "eficacia":
         if selected_option == "ofensiva":
             scatter_content = create_scatter_plot(
-                metric_x="TeamEffectivenessCompletion",
-                metric_y="TeamEffectivenessOffensiveConstruction",
-                label_x="Eficacia Finalización (%)",
-                label_y="Eficacia Construcción Ofensiva (%)",
+                metric_x="TeamEffectivenessOffensiveConstruction",
+                metric_y="TeamEffectivenessCompletion",
+                label_x="Eficacia Construcción Ofensiva (%)",
+                label_y="Eficacia Finalización (%)",
                 invert_y=False
             )
         elif selected_option == "defensiva":
             scatter_content = create_scatter_plot(
-                metric_x="TeamEfectivenessAvoidance",
-                metric_y="TeamEffectivenessDefensiveContainment",
-                label_x="Eficacia Evitación (%)",
-                label_y="Eficacia Contención Defensiva (%)",
+                metric_x="TeamEffectivenessDefensiveContainment",
+                metric_y="TeamEfectivenessAvoidance",
+                label_x="Eficacia Contención Defensiva (%)",
+                label_y="Eficacia Evitación (%)",
                 invert_y=False
             )
         elif selected_option == "peligrosidad":

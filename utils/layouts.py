@@ -55,26 +55,14 @@ def dashboard_layout():
                         ),
                         dbc.Collapse([
                             dbc.NavLink(
-                                [html.I(className="fas fa-clipboard-check me-2"), "Post Partido"],
-                                href="/control-proceso-competicion/post-partido",
+                                [html.I(className="fas fa-users-cog me-2"), "Rendimiento Colectivo"],
+                                href="/control-proceso-competicion/rendimiento-colectivo",
                                 active="exact",
                                 className="py-2 text-white-50 ps-4 small"
                             ),
                             dbc.NavLink(
-                                [html.I(className="fas fa-chart-line me-2"), "Evolutivo Temporada"],
-                                href="/control-proceso-competicion/evolutivo-temporada",
-                                active="exact",
-                                className="py-2 text-white-50 ps-4 small"
-                            ),
-                            dbc.NavLink(
-                                [html.I(className="fas fa-users me-2"), "Aprovechamiento de Plantilla"],
-                                href="/control-proceso-competicion/aprovechamiento-plantilla",
-                                active="exact",
-                                className="py-2 text-white-50 ps-4 small"
-                            ),
-                            dbc.NavLink(
-                                [html.I(className="fas fa-map me-2"), "Mapas de estilo-rendimiento"],
-                                href="/control-proceso-competicion/mapas-estilo-rendimiento",
+                                [html.I(className="fas fa-user-chart me-2"), "Rendimiento Individual"],
+                                href="/control-proceso-competicion/rendimiento-individual",
                                 active="exact",
                                 className="py-2 text-white-50 ps-4 small"
                             ),

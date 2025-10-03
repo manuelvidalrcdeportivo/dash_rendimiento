@@ -22,10 +22,9 @@ from pages.estado_funcional_antropometrico import layout as ef_antropo_layout
 # Nuevas secciones y subsecciones: CONTROL PROCESO ENTRENAMIENTO y páginas individuales
 from pages.evolutivo_temporada import layout as cpe_evolutivo_layout
 from pages.semaforo_control import layout as semaforo_layout
-from pages.competicion_post_partido import layout as crc_post_layout
-from pages.competicion_evolutivo_temporada import layout as crc_evolutivo_layout_func
-from pages.aprovechamiento_plantilla import layout as aprovechamiento_layout
-from pages.mapas_estilo_rendimiento import layout as mapas_estilo_layout
+# Nuevas páginas para CONTROL PROCESO COMPETICIÓN
+from pages.rendimiento_colectivo import layout as rendimiento_colectivo_layout
+from pages.rendimiento_individual import layout as rendimiento_individual_layout
 # Comentamos las páginas que no usaremos por ahora
 # from pages.ficha_jugador import layout as ficha_jugador_layout
 # from pages.postpartido import layout as postpartido_layout
@@ -157,21 +156,13 @@ def display_subpage(pathname, session_data):
         if has_access(["admin", "direccion", "analista"]):
             return semaforo_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
-    elif pathname == "/control-proceso-competicion/post-partido":
+    elif pathname == "/control-proceso-competicion/rendimiento-colectivo":
         if has_access(["admin", "direccion", "analista"]):
-            return crc_post_layout
+            return rendimiento_colectivo_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
-    elif pathname == "/control-proceso-competicion/evolutivo-temporada":
+    elif pathname == "/control-proceso-competicion/rendimiento-individual":
         if has_access(["admin", "direccion", "analista"]):
-            return crc_evolutivo_layout_func()
-        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
-    elif pathname == "/control-proceso-competicion/aprovechamiento-plantilla":
-        if has_access(["admin", "direccion", "analista"]):
-            return aprovechamiento_layout
-        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
-    elif pathname == "/control-proceso-competicion/mapas-estilo-rendimiento":
-        if has_access(["admin", "direccion", "analista"]):
-            return mapas_estilo_layout
+            return rendimiento_individual_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/estado-funcional/capacidad":
         if has_access(["admin", "direccion", "preparador"]):

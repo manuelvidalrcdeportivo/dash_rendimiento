@@ -6,15 +6,14 @@ Evolutivo Temporada (Competición): Visualización tipo ranking por métrica.
 - Colores: 1-6 verde, 7-16 amarillo, 17-22 rojo. Celdas vacías gris claro.
 """
 
-from dash import html, dcc
+from dash import html, dcc, callback, Input, Output
 from utils.layouts import standard_page
-from utils.db_manager import get_db_connection, get_laliga_db_connection, get_indicadores_rendimiento_laliga, get_available_teams_laliga, get_available_metrics_laliga, get_all_teams_rankings_laliga, get_rankings_compuestos_laliga
+from utils.db_manager import get_db_connection, get_laliga_db_connection, get_indicadores_rendimiento_laliga, get_available_teams_laliga, get_all_teams_rankings_laliga, get_rankings_compuestos_laliga, get_metric_info_from_name, get_metric_evolution_by_matchday, get_match_opponents_by_matchday
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from sqlalchemy import inspect
-
 
 def fetch_indicadores_rendimiento_laliga(team_name="RC Deportivo"):
     """Obtiene metrica, valor, ranking desde la BD LaLiga para un equipo específico."""
@@ -131,10 +130,10 @@ METRIC_NAME_MAPPING = {
     "Distancia High Sprint > 24 km/h (m.)": "Distancia > 24 km/h (m.)",
     
     # Balón Parado
-    "Expected Goals Balón Parado sin Penaltis (xG)": "xG S.P A.B.P",
-    "Goles a favor Balón Parado sin Penaltis (Nº)": "Goles S.P A.B.P",
-    "Expected Goals en Contra Balón Parado sin Penaltis (xG)": "xG en contra S.P A.B.P",
-    "Goles en contra Balón Parado sin Penaltis (Nº)": "Goles en contra S.P A.B.P",
+    "Goles a favor Balón Parado sin Penaltis (Nº)": "Goles B.P. F (N.P)",
+    "Expected Goals Balón Parado sin Penaltis (xG)": "xG B.P. F (N.P)",
+    "Goles en contra Balón Parado sin Penaltis (Nº)": "Goles B.P. C (N.P)",
+    "Expected Goals en Contra Balón Parado sin Penaltis (xG)": "xG B.P. C (N.P)",
 }
 
 # Definición de grupos usando nombres originales (para mapeo con BD)
@@ -163,10 +162,11 @@ GROUPS_ORIGINAL = [
         "Distancia High Sprint > 24 km/h (m.)",
     ]),
     ("Balón Parado", [
+         "Goles a favor Balón Parado sin Penaltis (Nº)",
         "Expected Goals Balón Parado sin Penaltis (xG)",
-        "Goles a favor Balón Parado sin Penaltis (Nº)",
+       "Goles en contra Balón Parado sin Penaltis (Nº)",
         "Expected Goals en Contra Balón Parado sin Penaltis (xG)",
-        "Goles en contra Balón Parado sin Penaltis (Nº)",
+        
     ]),
 ]
 
@@ -196,10 +196,10 @@ GROUPS = [
         "Distancia > 24 km/h (m.)",
     ]),
     ("Balón Parado", [
-        "xG S.P A.B.P",
-        "Goles S.P A.B.P",
-        "xG en contra S.P A.B.P",
-        "Goles en contra S.P A.B.P",
+        "Goles B.P. F (N.P)",
+        "xG B.P. F (N.P)",
+        "Goles B.P. C (N.P)",
+        "xG B.P. C (N.P)"
     ]),
 ]
 
@@ -1729,6 +1729,287 @@ clientside_callback(
     [State('selected-team-store', 'data')],
     prevent_initial_call=True
 )
+
+
+def build_layout_content_only():
+    """Retorna solo el contenido sin título ni wrapper de standard_page para ser embebido en otras páginas"""
+    df = fetch_indicadores_rendimiento()
+    
+    # Obtener rankings compuestos
+    try:
+        rankings_compuestos = get_rankings_compuestos_laliga("RC Deportivo")
+    except:
+        rankings_compuestos = {
+            'RankingGlobal': 4,
+            'RankingEstilo': 16,
+            'RankingOfensivo': 2,
+            'RankingDefensivo': 4,
+            'RankingFísico': 13,
+            'RankingBalónParado': 3
+        }
+    
+    # Construir heatmap HTML inicial (por defecto RC Deportivo)
+    heatmap_html = build_custom_heatmap_html(df, rankings_compuestos, set(), 'RC Deportivo')
+    
+    return html.Div([
+        # Inyectar CSS para tooltips personalizados y html2canvas
+        html.Div([
+            html.Link(rel='stylesheet', href='https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap'),
+            html.Script(src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js')
+        ]),
+        
+        description_block(),
+        
+        # Selector Premium de Equipos
+        team_selector_premium(),
+        
+        # Store para guardar el estado de las secciones colapsadas
+        dcc.Store(id='view-state-store', data={'collapsed_sections': []}),
+        
+        # Contenedor del heatmap HTML personalizado con loader
+        dcc.Loading(
+            id='loading-heatmap',
+            type='circle',
+            color='#007bff',
+            children=[
+                html.Div([
+                    # Contenedor para captura (sin escudo visible inicialmente)
+                    html.Div([
+                        # Contenedor del heatmap
+                        html.Div(
+                            id='custom-heatmap-container',
+                            children=[heatmap_html],
+                            style={'marginTop': '20px'}
+                        )
+                    ], id='heatmap-capture-area', style={'position': 'relative', 'backgroundColor': 'white', 'padding': '20px'}),
+                    
+                    # Leyenda justo debajo del heatmap, alineada a la derecha
+                    html.Div(
+                        legend_block(),
+                        style={
+                            'display': 'flex',
+                            'justifyContent': 'flex-end',
+                            'marginTop': '5px',
+                            'marginRight': '10px',
+                            'marginBottom': '10px',
+                            'backgroundColor': 'rgba(255, 255, 255, 0.96)',
+                            'padding': '8px 12px',
+                            'borderRadius': '6px',
+                            'boxShadow': '0 2px 6px rgba(0,0,0,0.12)',
+                            'border': '1px solid rgba(0,0,0,0.08)',
+                            'width': 'fit-content',
+                            'marginLeft': 'auto'
+                        }
+                    )
+                ])
+            ]
+        ),
+        
+        # NUEVA SECCIÓN: Profundizar en una métrica
+        html.Div([
+            html.Div([
+                html.H5("Profundiza en el evolutivo de una métrica", 
+                       style={
+                           'color': '#1e3d59', 
+                           'fontFamily': 'Montserrat, sans-serif',
+                           'fontWeight': '600',
+                           'marginBottom': '15px'
+                       }),
+                html.P("Selecciona una métrica para ver su evolución jornada a jornada:",
+                      style={
+                          'color': '#6c757d',
+                          'fontFamily': 'Montserrat, sans-serif',
+                          'marginBottom': '10px'
+                      }),
+                dcc.Dropdown(
+                    id='metric-evolution-selector',
+                    options=[
+                        {'label': METRIC_NAME_MAPPING[metric], 'value': metric}
+                        for group_name, metrics in GROUPS_ORIGINAL
+                        for metric in metrics
+                    ],
+                    placeholder='Selecciona una métrica...',
+                    style={
+                        'fontFamily': 'Montserrat, sans-serif',
+                        'marginBottom': '20px'
+                    }
+                )
+            ]),
+            
+            # Contenedor del gráfico evolutivo con loading
+            dcc.Loading(
+                id='loading-evolution',
+                type='circle',
+                color='#1e3d59',
+                children=[html.Div(id='metric-evolution-graph', children=[])]
+            )
+        ], style={
+            'marginTop': '10px',
+            'padding': '20px',
+            'backgroundColor': 'rgba(248, 249, 250, 0.5)',
+            'borderRadius': '8px'
+        })
+    ])
+
+
+# Callback para actualizar el gráfico de evolución de métrica
+@callback(
+    Output('metric-evolution-graph', 'children'),
+    [Input('metric-evolution-selector', 'value'),
+     Input('selected-team-store', 'data')]
+)
+def update_metric_evolution(selected_metric, team_data):
+    """Actualiza el gráfico de evolución de una métrica por jornada"""
+    if not selected_metric or not team_data:
+        return html.Div()
+    
+    # Manejar tanto si team_data es string o dict
+    if isinstance(team_data, str):
+        team_name = team_data
+    elif isinstance(team_data, dict):
+        team_name = team_data.get('team', 'RC Deportivo')
+    else:
+        team_name = 'RC Deportivo'
+    
+    # Obtener metric_id, metric_category y season_id
+    metric_id, metric_category, season_id = get_metric_info_from_name(selected_metric, team_name)
+    
+    if not metric_id or not metric_category:
+        return html.Div(
+            "No se pudo obtener información de la métrica seleccionada.",
+            style={'color': '#dc3545', 'fontFamily': 'Montserrat, sans-serif'}
+        )
+    
+    # Usar season_id de la BD o 1 por defecto
+    if not season_id:
+        season_id = 1
+    
+    # Obtener datos de evolución
+    df_evolution = get_metric_evolution_by_matchday(team_name, metric_id, metric_category, season_id)
+    
+    # Obtener rivales por jornada
+    opponents = get_match_opponents_by_matchday(team_name, season_id)
+    
+    if df_evolution.empty:
+        return html.Div(
+            f"No hay datos disponibles para {METRIC_NAME_MAPPING.get(selected_metric, selected_metric)}",
+            style={'color': '#6c757d', 'fontFamily': 'Montserrat, sans-serif'}
+        )
+    
+    # Crear DataFrame con todas las 42 jornadas
+    all_matchdays = pd.DataFrame({'match_day_number': range(1, 43)})
+    df_full = all_matchdays.merge(df_evolution, on='match_day_number', how='left')
+    
+    # Calcular la media de los valores existentes
+    mean_value = df_evolution['metric_value'].mean()
+    
+    # Crear el gráfico
+    fig = go.Figure()
+    
+    # Agregar barras con información del rival en hover
+    hover_texts = []
+    for _, row in df_full.iterrows():
+        matchday = int(row['match_day_number'])
+        opponent = opponents.get(matchday, '')
+        if pd.notna(row['metric_value']) and opponent:
+            hover_texts.append(f"<b>Jornada {matchday}</b><br>vs {opponent}<br>Valor: {row['metric_value']:.2f}")
+        elif pd.notna(row['metric_value']):
+            hover_texts.append(f"<b>Jornada {matchday}</b><br>Valor: {row['metric_value']:.2f}")
+        else:
+            hover_texts.append(f"<b>Jornada {matchday}</b><br>Sin datos")
+    
+    fig.add_trace(go.Bar(
+        x=df_full['match_day_number'],
+        y=df_full['metric_value'],
+        name='Valor',
+        marker=dict(
+            color='#1e3d59',
+            opacity=0.8
+        ),
+        hovertemplate='%{customdata}<extra></extra>',
+        customdata=hover_texts
+    ))
+    
+    # Agregar línea de media discontinua
+    fig.add_trace(go.Scatter(
+        x=df_full['match_day_number'],
+        y=[mean_value] * len(df_full),
+        name=f'Media: {mean_value:.2f}',
+        mode='lines',
+        line=dict(
+            color='#dc3545',
+            width=2,
+            dash='dash'
+        ),
+        hoverinfo='skip'
+    ))
+    
+    # Configurar layout del gráfico
+    fig.update_layout(
+        title=dict(
+            text=f"Evolución: {METRIC_NAME_MAPPING.get(selected_metric, selected_metric)}",
+            font=dict(
+                family='Montserrat, sans-serif',
+                size=18,
+                color='#1e3d59'
+            ),
+            x=0.5,
+            xanchor='center'
+        ),
+        xaxis=dict(
+            title=dict(
+                text='Jornada',
+                font=dict(
+                    family='Montserrat, sans-serif',
+                    size=14,
+                    color='#1e3d59'
+                )
+            ),
+            tickfont=dict(
+                family='Montserrat, sans-serif',
+                size=12
+            ),
+            gridcolor='rgba(0,0,0,0.05)',
+            dtick=1,
+            range=[0.5, 42.5]
+        ),
+        yaxis=dict(
+            title=dict(
+                text='Valor',
+                font=dict(
+                    family='Montserrat, sans-serif',
+                    size=14,
+                    color='#1e3d59'
+                )
+            ),
+            tickfont=dict(
+                family='Montserrat, sans-serif',
+                size=12
+            ),
+            gridcolor='rgba(0,0,0,0.05)'
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Montserrat, sans-serif'),
+        hovermode='x unified',
+        showlegend=True,
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='right',
+            x=1,
+            font=dict(family='Montserrat, sans-serif')
+        ),
+        margin=dict(l=60, r=20, t=80, b=60),
+        height=400
+    )
+    
+    return dcc.Graph(
+        figure=fig,
+        config={'displayModeBar': False},
+        style={'backgroundColor': 'transparent'}
+    )
 
 
 # Layout dinámico: se ejecuta cada vez que se accede a la página

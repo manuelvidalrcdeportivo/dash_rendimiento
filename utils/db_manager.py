@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, text, inspect
 import os
 from dotenv import load_dotenv
 import sys
+import traceback
 
 # Cargar variables de entorno para las credenciales de la base de datos
 load_dotenv()
@@ -694,6 +695,165 @@ def get_all_teams_rankings_laliga(metric_names):
     except Exception as e:
         print(f"Error obteniendo rankings múltiples: {e}")
         return {}
+
+def get_metric_info_from_name(metric_name, team_name="RC Deportivo"):
+    """
+    Obtiene el metric_id, metric_category y season_id para una métrica específica desde indicadores_rendimiento.
+    
+    Args:
+        metric_name (str): Nombre de la métrica (ej: "Iniciativa de Juego (Puntos)")
+        team_name (str): Nombre del equipo
+    
+    Returns:
+        tuple: (metric_id, metric_category, season_id) o (None, None, None) si no se encuentra
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return None, None, None
+        
+        query = """
+        SELECT metric_id, metric_category, season_id
+        FROM indicadores_rendimiento
+        WHERE team_name = %s AND metric_name = %s
+        LIMIT 1
+        """
+        
+        df = pd.read_sql(query, engine, params=(team_name, metric_name))
+        
+        if not df.empty:
+            return df.iloc[0]['metric_id'], df.iloc[0]['metric_category'], df.iloc[0]['season_id']
+        
+        return None, None, None
+        
+    except Exception as e:
+        print(f"Error obteniendo info de métrica: {e}")
+        return None, None, None
+
+
+def get_match_opponents_by_matchday(team_name, season_id=1):
+    """
+    Obtiene los equipos rivales para cada jornada.
+    
+    Args:
+        team_name (str): Nombre del equipo en laliga_teams (ej: "RC Deportivo")
+        season_id (int): ID de la temporada
+    
+    Returns:
+        dict: {match_day_number: opponent_name}
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return {}
+        
+        # Primero obtener los match_ids del equipo desde laliga_teams
+        query_match_ids = """
+        SELECT DISTINCT match_id 
+        FROM laliga_teams 
+        WHERE team_name = %s
+        """
+        df_match_ids = pd.read_sql(query_match_ids, engine, params=(team_name,))
+        
+        if df_match_ids.empty:
+            return {}
+        
+        match_ids = df_match_ids['match_id'].tolist()
+        
+        # Obtener información de partidos desde laliga_matches
+        placeholders = ','.join(['%s'] * len(match_ids))
+        query_matches = f"""
+        SELECT 
+            match_day_number,
+            home_team_name,
+            away_team_name
+        FROM laliga_matches
+        WHERE match_id IN ({placeholders})
+        AND season_id = %s
+        ORDER BY match_day_number
+        """
+        
+        df_matches = pd.read_sql(query_matches, engine, params=tuple(match_ids) + (season_id,))
+        
+        if df_matches.empty:
+            return {}
+        
+        # Mapeo de nombres entre laliga_teams y laliga_matches
+        team_name_mapping = {
+            'RC Deportivo': 'Deportivo de La Coruña',
+            # Agregar más mapeos si es necesario
+        }
+        
+        team_name_in_matches = team_name_mapping.get(team_name, team_name)
+        
+        # Determinar el rival en cada jornada
+        opponents = {}
+        for _, row in df_matches.iterrows():
+            matchday = int(row['match_day_number'])
+            if row['home_team_name'] == team_name_in_matches:
+                opponents[matchday] = row['away_team_name']
+            else:
+                opponents[matchday] = row['home_team_name']
+        
+        return opponents
+        
+    except Exception as e:
+        print(f"Error obteniendo rivales por jornada: {e}")
+        return {}
+
+
+def get_metric_evolution_by_matchday(team_name, metric_id, metric_category, season_id=1):
+    """
+    Obtiene la evolución de una métrica específica para un equipo a lo largo de las jornadas.
+    
+    Args:
+        team_name (str): Nombre del equipo
+        metric_id (str): ID de la métrica a consultar
+        metric_category (str): Categoría de la métrica
+        season_id (int): ID de la temporada (por defecto 1)
+    
+    Returns:
+        DataFrame con columnas: match_day_number, metric_value
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return pd.DataFrame(columns=['match_day_number', 'metric_value'])
+        
+        # Query optimizada: primero filtrar por laliga_teams (que tiene el nombre correcto)
+        # y luego hacer JOIN con laliga_matches para obtener match_day_number
+        query = """
+        SELECT 
+            m.match_day_number,
+            t.metric_value
+        FROM laliga_teams t
+        INNER JOIN laliga_matches m ON t.match_id = m.match_id
+        WHERE 
+            t.team_name = %s
+            AND t.metric_id = %s
+            AND t.metric_category = %s
+            AND m.season_id = %s
+        ORDER BY m.match_day_number
+        """
+        
+        df = pd.read_sql(
+            query, 
+            engine, 
+            params=(team_name, metric_id, metric_category, season_id)
+        )
+        
+        # Convertir a numéricos y limpiar
+        if not df.empty:
+            df['match_day_number'] = pd.to_numeric(df['match_day_number'], errors='coerce')
+            df['metric_value'] = pd.to_numeric(df['metric_value'], errors='coerce')
+            df = df[['match_day_number', 'metric_value']].dropna()
+        
+        return df
+        
+    except Exception as e:
+        print(f"Error obteniendo evolución de métrica: {e}")
+        return pd.DataFrame(columns=['match_day_number', 'metric_value'])
+
 
 def get_rankings_compuestos_laliga(team_name="RC Deportivo"):
     """
