@@ -94,7 +94,7 @@ def get_mapas_funcionales_content():
                     }
                 ),
                 html.Button(
-                    "Funcionalidad",
+                    "Funcionalidad Of. / Def. ",
                     id="subtab-mf-funcionalidad",
                     className="subtab-button",
                     style={
@@ -236,7 +236,7 @@ layout = standard_page([
                     }
                 ),
                 html.Button(
-                    "Uso-Aprovechamiento de Plantilla",
+                    "Uso-Aprovechamiento Plantilla",
                     id="tab-rc-aprovechamiento",
                     className="tab-button",
                     style={
@@ -407,11 +407,11 @@ def update_mf_subtabs(n_goles, n_eficacia, n_funcionalidad, n_fisico):
     elif active_subtab == 2:
         content = create_scatter_block(
             block_id="funcionalidad",
-            title="Funcionalidad",
+            title="Funcionalidad Of. / Def.",
             icon="fa-cogs",
             options=[
                 {"label": "Profundidad Ofensiva", "value": "profundidad_ofensiva"},
-                {"label": "Agresividad-Intensidad", "value": "agresividad_intensidad"}
+                {"label": "Agresividad-Intensidad Def.", "value": "agresividad_intensidad"}
             ],
             default_option="profundidad_ofensiva"
         )

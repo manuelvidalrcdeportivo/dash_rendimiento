@@ -70,11 +70,11 @@ def get_scatter_data(metric_x, metric_y):
         print(f"Error obteniendo datos scatter: {e}")
         return None
 
-def create_scatter_plot(metric_x, metric_y, label_x, label_y, invert_y=False):
+def create_scatter_plot(metric_x, metric_y, label_x, label_y, invert_y=False, custom_title=None):
     """Crea un scatter plot con escudos de equipos y líneas medias"""
     
-    # Título automático: Eje X vs Eje Y
-    title = f"{label_x} vs {label_y}"
+    # Título: personalizado o automático
+    title = custom_title if custom_title else f"{label_x} vs {label_y}"
     
     # Obtener datos
     df = get_scatter_data(metric_x, metric_y)
@@ -271,7 +271,7 @@ def get_mapas_rendimiento_content():
             icon="fa-cogs",
             options=[
                 {"label": "Profundidad Ofensiva", "value": "profundidad_ofensiva"},
-                {"label": "Agresividad-Intensidad", "value": "agresividad_intensidad"}
+                {"label": "Agresividad-Intensidad Def.", "value": "agresividad_intensidad"}
             ],
             default_option="profundidad_ofensiva"
         ),
@@ -745,7 +745,8 @@ def update_scatter_block(n_clicks_list, current_option, block_id, option_values)
                 metric_y="TeamExpectedGoalsAgainst",
                 label_x="xG a Favor",
                 label_y="xG en Contra",
-                invert_y=True
+                invert_y=True,
+                custom_title="Peligrosidad Generada vs Peligrosidad Concedida"
             )
         else:
             scatter_content = create_placeholder_scatter(block_id, selected_option)

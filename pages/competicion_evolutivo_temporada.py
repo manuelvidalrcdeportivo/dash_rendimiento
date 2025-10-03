@@ -575,7 +575,7 @@ def build_ranking_heatmap(df: pd.DataFrame, selected_view='expanded', collapsed_
             fillcolor=color_overall, line=dict(color='black', width=2),
             layer='above'
         )
-        overall_text = f"RENDIMIENTO GLOBAL ({overall_ranking:.0f})" if isinstance(overall_ranking, int) else f"RENDIMIENTO GLOBAL ({overall_ranking:.1f})"
+        overall_text = f"ESTILO-RENDIMIENTO GLOBAL ({overall_ranking:.0f})" if isinstance(overall_ranking, int) else f"ESTILO-RENDIMIENTO GLOBAL ({overall_ranking:.1f})"
         fig.add_annotation(
             x=0.5, y=0.5,
             xref='x domain', yref='y',
@@ -650,6 +650,19 @@ def build_ranking_heatmap(df: pd.DataFrame, selected_view='expanded', collapsed_
     return fig
 
 
+def get_section_display_name(section_name):
+    """Convierte el nombre de sección a su versión de visualización"""
+    # Quitar "Rendimiento" de los nombres pero mantener el resto
+    name_map = {
+        "Rendimiento ofensivo": "OFENSIVO",
+        "Rendimiento defensivo": "DEFENSIVO",
+        "Rendimiento físico": "FÍSICO",
+        "Estilo": "ESTILO",
+        "Balón Parado": "BALÓN PARADO"
+    }
+    return name_map.get(section_name, section_name.upper())
+
+
 def legend_block():
     # Leyenda estilizada y compacta
     box_style = {
@@ -684,12 +697,15 @@ def description_block():
     return html.Div([
         html.P(
             [
-                html.Span('Cada columna representa una métrica; las filas muestran el ranking que ocupa el equipo en la competición (1 arriba → 22 abajo). '),
+                html.Span('Cada columna representa una métrica; las filas muestran el ranking que ocupa el equipo en la competición (1 arriba → 22 abajo).'),
+                html.Br(),
                 html.Span('El color refleja la banda de rendimiento por métrica y por grupo.'),
+                html.Br(),
+                html.Span('Haz clic en un bloque para agrupar los rankings de los indicadores de ese bloque y ver la clasificación general.'),
             ],
-            className='text-muted', style={'fontStyle': 'italic'}
+            className='text-muted', style={'fontStyle': 'italic', 'lineHeight': '1.6'}
         )
-    ], className='mb-2')
+    ], style={'marginBottom': '0px'})
 
 
 def _group_tied_teams(rankings_dict):
@@ -971,7 +987,7 @@ def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings
     
     # Bloque global
     global_block = html.Div(
-        f"RENDIMIENTO GLOBAL ({int(global_ranking)})",
+        f"ESTILO-RENDIMIENTO GLOBAL ({int(global_ranking)})",
         id='heatmap-block-global',
         style={
             'backgroundColor': _get_color_for_ranking(global_ranking),
@@ -1001,9 +1017,12 @@ def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings
         # En vista global, ocultar los bloques de sección individuales
         display_style = 'none' if is_global_view else 'block'
         
+        # Obtener nombre de visualización (sin "Rendimiento")
+        display_name = get_section_display_name(group['name'])
+        
         section_blocks_items.append(
             html.Div(
-                f"{group['name'].upper()} ({int(group['ranking'])})",
+                f"{display_name} ({int(group['ranking'])})",
                 id=f"heatmap-block-{group['name'].replace(' ', '-').lower()}",
                 className='heatmap-section-block',  # Añadir clase para hover
                 style={
@@ -1433,8 +1452,6 @@ def build_layout():
             html.Div(id='download-trigger', style={'display': 'none'})
         ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '20px'}),
         
-        description_block(),
-        
         # Selector Premium de Equipos
         team_selector_premium(),
         
@@ -1454,9 +1471,9 @@ def build_layout():
                         html.Div(
                             id='custom-heatmap-container',
                             children=[heatmap_html],
-                            style={'marginTop': '20px'}
+                            style={'marginTop': '10px', 'marginBottom': '0px'}
                         )
-                    ], id='heatmap-capture-area', style={'position': 'relative', 'backgroundColor': 'white', 'padding': '20px'}),
+                    ], id='heatmap-capture-area', style={'position': 'relative', 'backgroundColor': 'white', 'padding': '0px', 'paddingBottom': '0px'}),
                     
                     # Leyenda justo debajo del heatmap, alineada a la derecha
                     html.Div(
@@ -1464,9 +1481,9 @@ def build_layout():
                         style={
                             'display': 'flex',
                             'justifyContent': 'flex-end',
-                            'marginTop': '5px',
+                            'marginTop': '0px',
                             'marginRight': '10px',
-                            'marginBottom': '10px',
+                            'marginBottom': '0px',
                             'backgroundColor': 'rgba(255, 255, 255, 0.96)',
                             'padding': '8px 12px',
                             'borderRadius': '6px',
@@ -1476,9 +1493,61 @@ def build_layout():
                             'marginLeft': 'auto'
                         }
                     )
-                ])
+                ], style={'marginBottom': '0px'})
             ]
-        )
+        ),
+        
+        # Descripción después de la leyenda (fuera del loading)
+        html.Div(
+            description_block(),
+            style={'marginTop': '5px', 'marginBottom': '5px'}
+        ),
+        
+        # SECCIÓN: Evolutivo métricas estilo-rendimiento global
+        html.Div([
+            html.Div([
+                html.H5("Evolutivo métricas estilo-rendimiento global", 
+                       style={
+                           'color': '#1e3d59', 
+                           'fontFamily': 'Montserrat, sans-serif',
+                           'fontWeight': '600',
+                           'marginTop': '0px',
+                           'marginBottom': '15px'
+                       }),
+                html.P("Selecciona una métrica para ver su evolución jornada a jornada:",
+                      style={
+                          'color': '#6c757d',
+                          'fontFamily': 'Montserrat, sans-serif',
+                          'marginBottom': '10px'
+                      }),
+                dcc.Dropdown(
+                    id='metric-evolution-selector',
+                    options=[
+                        {'label': METRIC_NAME_MAPPING[metric], 'value': metric}
+                        for group_name, metrics in GROUPS_ORIGINAL
+                        for metric in metrics
+                    ],
+                    placeholder='Selecciona una métrica...',
+                    style={
+                        'fontFamily': 'Montserrat, sans-serif',
+                        'marginBottom': '20px'
+                    }
+                )
+            ]),
+            
+            # Contenedor del gráfico evolutivo con loading
+            dcc.Loading(
+                id='loading-evolution',
+                type='circle',
+                color='#1e3d59',
+                children=[html.Div(id='metric-evolution-graph', children=[])]
+            )
+        ], style={
+            'marginTop': '0px',
+            'padding': '15px',
+            'backgroundColor': 'rgba(248, 249, 250, 0.5)',
+            'borderRadius': '8px'
+        })
     ])
 
 
@@ -1758,8 +1827,6 @@ def build_layout_content_only():
             html.Script(src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js')
         ]),
         
-        description_block(),
-        
         # Selector Premium de Equipos
         team_selector_premium(),
         
@@ -1791,7 +1858,7 @@ def build_layout_content_only():
                             'justifyContent': 'flex-end',
                             'marginTop': '5px',
                             'marginRight': '10px',
-                            'marginBottom': '10px',
+                            'marginBottom': '5px',  # Reducido para acercar el evolutivo
                             'backgroundColor': 'rgba(255, 255, 255, 0.96)',
                             'padding': '8px 12px',
                             'borderRadius': '6px',
@@ -1805,14 +1872,21 @@ def build_layout_content_only():
             ]
         ),
         
+        # Descripción después de la leyenda (fuera del loading)
+        html.Div(
+            description_block(),
+            style={'marginTop': '0px', 'marginBottom': '0px'}  # Pegado al heatmap
+        ),
+        
         # NUEVA SECCIÓN: Profundizar en una métrica
         html.Div([
             html.Div([
-                html.H5("Profundiza en el evolutivo de una métrica", 
+                html.H5("Evolutivo métricas estilo-rendimiento global", 
                        style={
                            'color': '#1e3d59', 
                            'fontFamily': 'Montserrat, sans-serif',
                            'fontWeight': '600',
+                           'marginTop': '0px',  # Pegado a la descripción
                            'marginBottom': '15px'
                        }),
                 html.P("Selecciona una métrica para ver su evolución jornada a jornada:",
@@ -1844,8 +1918,8 @@ def build_layout_content_only():
                 children=[html.Div(id='metric-evolution-graph', children=[])]
             )
         ], style={
-            'marginTop': '10px',
-            'padding': '20px',
+            'marginTop': '0px',  # Eliminado espacio superior
+            'padding': '15px',  # Reducido padding para más compacto
             'backgroundColor': 'rgba(248, 249, 250, 0.5)',
             'borderRadius': '8px'
         })
