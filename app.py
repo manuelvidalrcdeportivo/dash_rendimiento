@@ -25,6 +25,9 @@ from pages.semaforo_control import layout as semaforo_layout
 # Nuevas páginas para CONTROL PROCESO COMPETICIÓN
 from pages.rendimiento_colectivo import layout as rendimiento_colectivo_layout
 from pages.rendimiento_individual import layout as rendimiento_individual_layout
+# Importar módulos para registrar sus callbacks
+import pages.contextos_partidos
+import pages.tendencia_resultados
 # Comentamos las páginas que no usaremos por ahora
 # from pages.ficha_jugador import layout as ficha_jugador_layout
 # from pages.postpartido import layout as postpartido_layout

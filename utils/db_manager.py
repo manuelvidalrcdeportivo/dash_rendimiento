@@ -1219,3 +1219,418 @@ def get_full_section_ranking_fallback(ranking_id: str):
     
     print(f"⚠️ Usando datos fallback para {ranking_id}")
     return ranking_data
+
+
+# --------------------------------------
+# FUNCIONES PARA CONTEXTOS DE PARTIDOS
+# --------------------------------------
+
+def get_match_context_analysis(team_name="RC Deportivo", competition_id=None, season_id=None):
+    """
+    Obtiene el análisis de contextos de partidos desde la tabla match_context_analysis.
+    
+    Args:
+        team_name (str): Nombre del equipo en laliga_teams (por defecto "RC Deportivo")
+        competition_id (str): ID de la competición (opcional)
+        season_id (str): ID de la temporada (opcional)
+    
+    Returns:
+        DataFrame con todos los campos de match_context_analysis
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            print("Error: No se pudo conectar a la BD LaLiga")
+            return pd.DataFrame()
+        
+        # Verificar si la tabla existe
+        inspector = inspect(engine)
+        if 'match_context_analysis' not in inspector.get_table_names():
+            print("Error: Tabla match_context_analysis no existe")
+            return pd.DataFrame()
+        
+        # Construir query con filtros opcionales
+        query = """
+        SELECT 
+            match_id,
+            season_id,
+            season_name,
+            competition_id,
+            competition_name,
+            match_date,
+            match_day_number,
+            depor_team_name_matches,
+            depor_team_name_teams,
+            opponent_name,
+            condicion,
+            goles_favor,
+            goles_contra,
+            resultado,
+            resultado_tipo,
+            pct_ganando,
+            pct_empatando,
+            pct_perdiendo,
+            contexto_preferente,
+            contexto_tipo,
+            etiqueta_contexto,
+            interpretacion,
+            process_date,
+            last_updated
+        FROM match_context_analysis
+        WHERE depor_team_name_teams = %s
+        """
+        
+        params = [team_name]
+        
+        if competition_id:
+            query += " AND competition_id = %s"
+            params.append(competition_id)
+        
+        if season_id:
+            query += " AND season_id = %s"
+            params.append(season_id)
+        
+        query += " ORDER BY match_date ASC, match_day_number ASC"
+        
+        df = pd.read_sql(query, engine, params=tuple(params))
+        
+        print(f"✅ Obtenidos {len(df)} partidos con análisis de contexto")
+        return df
+        
+    except Exception as e:
+        print(f"Error obteniendo análisis de contextos: {e}")
+        import traceback
+        traceback.print_exc()
+        return pd.DataFrame()
+
+
+def get_matches_by_context_matrix(team_name="RC Deportivo", competition_id=None, season_id=None):
+    """
+    Obtiene los partidos organizados en una matriz 2x2 según resultado_tipo y contexto_tipo.
+    
+    Args:
+        team_name (str): Nombre del equipo
+        competition_id (str): ID de la competición (opcional)
+        season_id (str): ID de la temporada (opcional)
+    
+    Returns:
+        dict: Diccionario con estructura {
+            'Positivo': {'Favorable': [...], 'Desfavorable': [...]},
+            'Negativo': {'Favorable': [...], 'Desfavorable': [...]}
+        }
+    """
+    try:
+        df = get_match_context_analysis(team_name, competition_id, season_id)
+        
+        if df.empty:
+            return {
+                'Positivo': {'Favorable': [], 'Desfavorable': []},
+                'Negativo': {'Favorable': [], 'Desfavorable': []}
+            }
+        
+        # Organizar en matriz
+        matrix = {
+            'Positivo': {'Favorable': [], 'Desfavorable': []},
+            'Negativo': {'Favorable': [], 'Desfavorable': []}
+        }
+        
+        for _, row in df.iterrows():
+            resultado_tipo = row['resultado_tipo']
+            contexto_tipo = row['contexto_tipo']
+            
+            match_info = {
+                'match_id': row['match_id'],
+                'match_date': row['match_date'],
+                'match_day_number': row['match_day_number'],
+                'opponent_name': row['opponent_name'],
+                'condicion': row['condicion'],
+                'goles_favor': row['goles_favor'],
+                'goles_contra': row['goles_contra'],
+                'resultado': row['resultado'],
+                'resultado_tipo': row['resultado_tipo'],
+                'contexto_tipo': row['contexto_tipo'],
+                'contexto_preferente': row['contexto_preferente'],
+                'etiqueta_contexto': row['etiqueta_contexto'],
+                'interpretacion': row['interpretacion'],
+                'pct_ganando': row['pct_ganando'],
+                'pct_empatando': row['pct_empatando'],
+                'pct_perdiendo': row['pct_perdiendo']
+            }
+            
+            matrix[resultado_tipo][contexto_tipo].append(match_info)
+        
+        return matrix
+        
+    except Exception as e:
+        print(f"Error organizando matriz de contextos: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'Positivo': {'Favorable': [], 'Desfavorable': []},
+            'Negativo': {'Favorable': [], 'Desfavorable': []}
+        }
+
+
+def get_context_statistics(team_name="RC Deportivo", competition_id=None, season_id=None):
+    """
+    Obtiene estadísticas agregadas de los contextos de partidos.
+    
+    Args:
+        team_name (str): Nombre del equipo
+        competition_id (str): ID de la competición (opcional)
+        season_id (str): ID de la temporada (opcional)
+    
+    Returns:
+        dict: Estadísticas de distribución de partidos por contexto
+    """
+    try:
+        df = get_match_context_analysis(team_name, competition_id, season_id)
+        
+        if df.empty:
+            return {}
+        
+        stats = {
+            'total_partidos': len(df),
+            'por_resultado_tipo': df['resultado_tipo'].value_counts().to_dict(),
+            'por_contexto_tipo': df['contexto_tipo'].value_counts().to_dict(),
+            'por_contexto_preferente': df['contexto_preferente'].value_counts().to_dict(),
+            'por_condicion': df['condicion'].value_counts().to_dict(),
+            'matriz_resultado_contexto': df.groupby(['resultado_tipo', 'contexto_tipo']).size().to_dict()
+        }
+        
+        return stats
+        
+    except Exception as e:
+        print(f"Error calculando estadísticas de contexto: {e}")
+        return {}
+
+
+def get_league_standings(competition_id=None, season_id=None, team_name="RC Deportivo"):
+    """
+    Obtiene la clasificación de la liga con opción de vista resumida centrada en un equipo.
+    
+    Args:
+        competition_id (str): ID de la competición (opcional)
+        season_id (str): ID de la temporada (opcional)
+        team_name (str): Nombre del equipo para centrar la vista
+    
+    Returns:
+        dict: {
+            'full_standings': DataFrame con toda la clasificación,
+            'team_position': posición del equipo,
+            'context_standings': DataFrame con 5 arriba y 5 abajo del equipo
+        }
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            print("Error: No se pudo conectar a la BD LaLiga")
+            return {}
+        
+        # Query base
+        query = """
+        SELECT 
+            competition_id, competition_name, season_id, season_name,
+            team_id, team_name,
+            position, position_previous, position_change,
+            matches_played, matches_won, matches_drawn, matches_lost, points,
+            matches_played_home, matches_won_home, matches_drawn_home, matches_lost_home, points_home,
+            matches_played_away, matches_won_away, matches_drawn_away, matches_lost_away, points_away,
+            goals_for, goals_against, goal_difference,
+            goals_for_home, goals_against_home, goal_difference_home,
+            goals_for_away, goals_against_away, goal_difference_away,
+            avg_goals_for, avg_goals_against, avg_points,
+            current_streak, current_streak_count, unbeaten_streak, winless_streak,
+            clean_sheets, failed_to_score,
+            last_5_matches, last_5_points,
+            biggest_win, biggest_win_margin, biggest_loss, biggest_loss_margin,
+            last_match_date, last_match_result, last_updated
+        FROM league_standings
+        WHERE 1=1
+        """
+        
+        params = []
+        
+        if competition_id:
+            query += " AND competition_id = %s"
+            params.append(competition_id)
+        
+        if season_id:
+            query += " AND season_id = %s"
+            params.append(season_id)
+        
+        query += " ORDER BY position ASC"
+        
+        df = pd.read_sql(query, engine, params=tuple(params) if params else None)
+        
+        if df.empty:
+            return {}
+        
+        # Encontrar posición del equipo
+        team_row = df[df['team_name'] == team_name]
+        
+        if team_row.empty:
+            # Si no se encuentra el equipo, devolver toda la tabla
+            return {
+                'full_standings': df,
+                'team_position': None,
+                'context_standings': df.head(11)  # Primeros 11 equipos
+            }
+        
+        team_position = int(team_row.iloc[0]['position'])
+        
+        # Crear vista de contexto: 5 arriba y 5 abajo
+        start_pos = max(1, team_position - 5)
+        end_pos = min(len(df), team_position + 5)
+        
+        context_df = df[(df['position'] >= start_pos) & (df['position'] <= end_pos)]
+        
+        print(f"✅ Clasificación obtenida: {len(df)} equipos, {team_name} en posición {team_position}")
+        
+        return {
+            'full_standings': df,
+            'team_position': team_position,
+            'context_standings': context_df
+        }
+        
+    except Exception as e:
+        print(f"Error obteniendo clasificación: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}
+
+
+def get_match_reports_links(match_id):
+    """
+    Obtiene los links de informes (postpartido y evolutivo) de un partido.
+    
+    Args:
+        match_id (int): ID del partido
+    
+    Returns:
+        dict: {'postpartido_link': str, 'evolutivo_link': str}
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return {}
+        
+        query = """
+        SELECT match_id, postpartido_link, evolutivo_link
+        FROM laliga_matches
+        WHERE match_id = %s
+        """
+        
+        df = pd.read_sql(query, engine, params=(match_id,))
+        
+        if df.empty:
+            return {'postpartido_link': None, 'evolutivo_link': None}
+        
+        return {
+            'postpartido_link': df.iloc[0]['postpartido_link'],
+            'evolutivo_link': df.iloc[0]['evolutivo_link']
+        }
+        
+    except Exception as e:
+        print(f"Error obteniendo links de informes: {e}")
+        return {'postpartido_link': None, 'evolutivo_link': None}
+
+
+def get_results_trend_statistics(team_name="RC Deportivo", competition_id=None, season_id=None, last_n=None):
+    """
+    Obtiene estadísticas de tendencia de resultados para visualizaciones.
+    
+    Args:
+        team_name (str): Nombre del equipo
+        competition_id (str): ID de la competición (opcional)
+        season_id (str): ID de la temporada (opcional)
+        last_n (int): Número de últimos partidos a considerar (None = todos)
+    
+    Returns:
+        dict: Estadísticas completas de tendencia
+    """
+    try:
+        df = get_match_context_analysis(team_name, competition_id, season_id)
+        
+        if df.empty:
+            return {}
+        
+        # Ordenar por fecha
+        df = df.sort_values('match_date', ascending=True)
+        
+        # Limitar a últimos N partidos si se especifica
+        if last_n:
+            df = df.tail(last_n)
+        
+        # Calcular puntos (Victoria=3, Empate=1, Derrota=0)
+        df['puntos'] = df['resultado'].map({'Victoria': 3, 'Empate': 1, 'Derrota': 0})
+        
+        # Estadísticas por resultado
+        resultado_counts = df['resultado'].value_counts().to_dict()
+        
+        # Estadísticas por condición
+        condicion_stats = {}
+        for condicion in ['Local', 'Visitante']:
+            df_cond = df[df['condicion'] == condicion]
+            if not df_cond.empty:
+                condicion_stats[condicion] = {
+                    'total': len(df_cond),
+                    'victorias': len(df_cond[df_cond['resultado'] == 'Victoria']),
+                    'empates': len(df_cond[df_cond['resultado'] == 'Empate']),
+                    'derrotas': len(df_cond[df_cond['resultado'] == 'Derrota']),
+                    'puntos': df_cond['puntos'].sum(),
+                    'goles_favor': df_cond['goles_favor'].sum(),
+                    'goles_contra': df_cond['goles_contra'].sum()
+                }
+        
+        # Racha actual
+        racha_actual = []
+        for _, row in df.tail(5).iterrows():
+            if row['resultado'] == 'Victoria':
+                racha_actual.append('V')
+            elif row['resultado'] == 'Empate':
+                racha_actual.append('E')
+            else:
+                racha_actual.append('D')
+        
+        # Últimos partidos para timeline
+        ultimos_partidos = []
+        for _, row in df.tail(10).iterrows():
+            ultimos_partidos.append({
+                'match_id': row['match_id'],
+                'match_date': row['match_date'],
+                'match_day_number': row['match_day_number'],
+                'opponent_name': row['opponent_name'],
+                'condicion': row['condicion'],
+                'goles_favor': row['goles_favor'],
+                'goles_contra': row['goles_contra'],
+                'resultado': row['resultado'],
+                'resultado_tipo': row['resultado_tipo'],
+                'contexto_tipo': row['contexto_tipo'],
+                'puntos': row['puntos']
+            })
+        
+        stats = {
+            'total_partidos': len(df),
+            'puntos_totales': df['puntos'].sum(),
+            'goles_favor': df['goles_favor'].sum(),
+            'goles_contra': df['goles_contra'].sum(),
+            'diferencia_goles': df['goles_favor'].sum() - df['goles_contra'].sum(),
+            'victorias': resultado_counts.get('Victoria', 0),
+            'empates': resultado_counts.get('Empate', 0),
+            'derrotas': resultado_counts.get('Derrota', 0),
+            'por_condicion': condicion_stats,
+            'racha_actual': racha_actual,
+            'ultimos_partidos': ultimos_partidos,
+            'puntos_ultimos_5': df.tail(5)['puntos'].sum() if len(df) >= 5 else df['puntos'].sum(),
+            'resultado_tipo_counts': df['resultado_tipo'].value_counts().to_dict(),
+            'contexto_tipo_counts': df['contexto_tipo'].value_counts().to_dict()
+        }
+        
+        return stats
+        
+    except Exception as e:
+        print(f"Error calculando estadísticas de tendencia: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}

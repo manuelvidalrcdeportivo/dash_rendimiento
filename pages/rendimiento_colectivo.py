@@ -12,21 +12,9 @@ from pages.competicion_evolutivo_temporada import build_layout_content_only as g
 from pages.mapas_estilo_rendimiento import get_mapas_rendimiento_content
 
 def get_tendencia_resultados_content():
-    """Contenido de la pestaña Tendencia Resultados"""
-    return html.Div([
-        html.Div([
-            html.I(className="fas fa-chart-line me-2", style={"fontSize": "24px", "color": "#1e3d59"}),
-            html.H4("Tendencia Resultados", style={"color": "#1e3d59", "display": "inline"})
-        ], className="mb-4"),
-        html.P(
-            "Esta sección mostrará el análisis de la tendencia de resultados del equipo.",
-            className="text-muted"
-        ),
-        html.Div([
-            html.I(className="fas fa-hard-hat fa-3x mb-3", style={"color": "#ffc107"}),
-            html.H5("En Desarrollo", style={"color": "#6c757d"})
-        ], style={"textAlign": "center", "padding": "60px 20px"})
-    ], className="p-4")
+    """Contenido de la pestaña Tendencia Resultados - Importa desde tendencia_resultados.py"""
+    from pages.tendencia_resultados import get_tendencia_resultados_content as get_tendencia_content
+    return get_tendencia_content()
 
 def get_perfil_estilo_rendimiento_content():
     """Contenido de la pestaña Perfil Estilo-Rendimiento - Reutiliza evolutivo temporada sin título"""
@@ -161,21 +149,9 @@ def get_mapas_funcionales_content():
     ])
 
 def get_contextos_partidos_content():
-    """Contenido de la pestaña Contextos Partidos"""
-    return html.Div([
-        html.Div([
-            html.I(className="fas fa-futbol me-2", style={"fontSize": "24px", "color": "#1e3d59"}),
-            html.H4("Contextos de Partidos", style={"color": "#1e3d59", "display": "inline"})
-        ], className="mb-4"),
-        html.P(
-            "Análisis de los diferentes contextos de los partidos (local/visitante, dinámica de marcador, etc.).",
-            className="text-muted"
-        ),
-        html.Div([
-            html.I(className="fas fa-hard-hat fa-3x mb-3", style={"color": "#ffc107"}),
-            html.H5("En Desarrollo", style={"color": "#6c757d"})
-        ], style={"textAlign": "center", "padding": "60px 20px"})
-    ], className="p-4")
+    """Contenido de la pestaña Contextos Partidos - Importa desde contextos_partidos.py"""
+    from pages.contextos_partidos import get_contextos_partidos_content as get_contextos_content
+    return get_contextos_content()
 
 # Layout principal
 layout = standard_page([

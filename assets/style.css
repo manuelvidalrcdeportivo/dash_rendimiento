@@ -316,3 +316,28 @@ ul.estilizado.red li::before {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ================= Contextos de Partidos - Match Cards ================= */
+.match-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+}
+
+/* Scrollbar personalizado para celdas de contexto */
+.context-cell-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.context-cell-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.context-cell-content::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+.context-cell-content::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
