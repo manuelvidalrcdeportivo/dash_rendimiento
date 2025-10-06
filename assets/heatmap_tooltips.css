@@ -79,7 +79,8 @@
 
 /* Estilos para el loader/spinner */
 #loading-heatmap {
-    min-height: 400px;
+    /* Evitar espacio en blanco extra: permitir que colapse según contenido */
+    min-height: 0 !important;
 }
 
 /* Efecto de carga en el contenedor */

@@ -31,7 +31,7 @@ def get_tendencia_resultados_content():
 def get_perfil_estilo_rendimiento_content():
     """Contenido de la pestaña Perfil Estilo-Rendimiento - Reutiliza evolutivo temporada sin título"""
     # Obtener solo el contenido sin título ni wrapper
-    return html.Div(get_evolutivo_temporada_content(), className="p-4")
+    return html.Div(get_evolutivo_temporada_content(), style={'padding': '10px 15px'})
 
 def get_uso_aprovechamiento_content():
     """Contenido de la pestaña Uso Aprovechamiento de Plantilla"""

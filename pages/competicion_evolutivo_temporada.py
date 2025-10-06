@@ -703,9 +703,9 @@ def description_block():
                 html.Br(),
                 html.Span('Haz clic en un bloque para agrupar los rankings de los indicadores de ese bloque y ver la clasificación general.'),
             ],
-            className='text-muted', style={'fontStyle': 'italic', 'lineHeight': '1.6'}
+            className='text-muted', style={'fontStyle': 'italic', 'lineHeight': '1.6', 'margin': '0'}
         )
-    ], style={'marginBottom': '0px'})
+    ], style={'marginTop': '0px', 'marginBottom': '0px', 'paddingBottom': '0px'})
 
 
 def _group_tied_teams(rankings_dict):
@@ -988,7 +988,7 @@ def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings
     # Bloque global
     global_block = html.Div(
         f"ESTILO-RENDIMIENTO GLOBAL ({int(global_ranking)})",
-        id='heatmap-block-global',
+        id={'type': 'heatmap-block', 'index': 'global'},
         style={
             'backgroundColor': _get_color_for_ranking(global_ranking),
             'border': '3px solid black',
@@ -1020,10 +1020,11 @@ def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings
         # Obtener nombre de visualización (sin "Rendimiento")
         display_name = get_section_display_name(group['name'])
         
+        slug = group['name'].replace(' ', '-').lower()
         section_blocks_items.append(
             html.Div(
                 f"{display_name} ({int(group['ranking'])})",
-                id=f"heatmap-block-{group['name'].replace(' ', '-').lower()}",
+                id={'type': 'heatmap-block', 'index': slug},
                 className='heatmap-section-block',  # Añadir clase para hover
                 style={
                     'backgroundColor': _get_color_for_ranking(group['ranking']),
@@ -1381,7 +1382,7 @@ def team_selector_premium():
                 'overflowY': 'hidden',
                 'gap': '8px',
                 'padding': '15px 20px',
-                'marginBottom': '25px',
+                'marginBottom': '10px',
                 'backgroundColor': '#f8f9fa',
                 'borderRadius': '10px',
                 'boxShadow': '0 3px 10px rgba(0,0,0,0.08)',
@@ -1558,29 +1559,19 @@ import dash
 @callback(
     Output('custom-heatmap-container', 'children'),
     Output('view-state-store', 'data'),
-    [Input({'type': 'heatmap-block', 'index': ALL}, 'n_clicks'),
-     Input('heatmap-block-global', 'n_clicks'),
-     Input('heatmap-block-estilo', 'n_clicks'),
-     Input('heatmap-block-rendimiento-ofensivo', 'n_clicks'),
-     Input('heatmap-block-rendimiento-defensivo', 'n_clicks'),
-     Input('heatmap-block-rendimiento-físico', 'n_clicks'),
-     Input('heatmap-block-balón-parado', 'n_clicks'),
-     Input('selected-team-store', 'data')],  # Añadido equipo seleccionado
+    Input('selected-team-store', 'data'),
     State('view-state-store', 'data'),
-    prevent_initial_call=True
+    prevent_initial_call=False
 )
-def handle_block_clicks(*args):
-    """Maneja clics en los bloques HTML para alternar secciones"""
-    
-    # Los dos últimos argumentos son states
-    selected_team = args[-2]  # Equipo seleccionado
-    current_state = args[-1]  # Estado de view
-    
-    # Obtener datos del equipo seleccionado
-    df = fetch_indicadores_rendimiento(selected_team)
+def build_initial_heatmap(selected_team, current_state):
+    """Construye el heatmap en la carga inicial y cuando cambie el equipo seleccionando."""
     try:
-        rankings_compuestos = get_rankings_compuestos_laliga(selected_team)
-    except:
+        df = fetch_indicadores_rendimiento(selected_team)
+    except Exception:
+        df = fetch_indicadores_rendimiento()
+    try:
+        rankings_compuestos = get_rankings_compuestos_laliga(selected_team or 'RC Deportivo')
+    except Exception:
         rankings_compuestos = {
             'RankingGlobal': 4,
             'RankingEstilo': 16,
@@ -1589,51 +1580,79 @@ def handle_block_clicks(*args):
             'RankingFísico': 13,
             'RankingBalónParado': 3
         }
-    
-    # Determinar qué botón se clicó
+    collapsed_sections = set(current_state.get('collapsed_sections', [])) if current_state else set()
+    heatmap_html = build_custom_heatmap_html(df, rankings_compuestos, collapsed_sections, selected_team or 'RC Deportivo')
+    return heatmap_html, {'collapsed_sections': list(collapsed_sections)}
+
+
+@callback(
+    Output('custom-heatmap-container', 'children', allow_duplicate=True),
+    Output('view-state-store', 'data', allow_duplicate=True),
+    [Input({'type': 'heatmap-block', 'index': ALL}, 'n_clicks'),
+     Input('selected-team-store', 'data')],
+    State('view-state-store', 'data'),
+    prevent_initial_call=True
+)
+def handle_block_clicks(*args):
+    """Maneja clics en los bloques HTML para alternar secciones (solo después de que existen en el layout).
+    Nota: ignora el primer disparo causado por la creación inicial de los componentes (n_clicks = 0/None).
+    """
+    clicks_list = args[0] if isinstance(args[0], list) else []
+    selected_team = args[-2]
+    current_state = args[-1]
+    try:
+        df = fetch_indicadores_rendimiento(selected_team)
+    except Exception:
+        df = fetch_indicadores_rendimiento()
+    try:
+        rankings_compuestos = get_rankings_compuestos_laliga(selected_team or 'RC Deportivo')
+    except Exception:
+        rankings_compuestos = {
+            'RankingGlobal': 4,
+            'RankingEstilo': 16,
+            'RankingOfensivo': 2,
+            'RankingDefensivo': 4,
+            'RankingFísico': 13,
+            'RankingBalónParado': 3
+        }
     ctx = dash.callback_context
     if not ctx.triggered:
-        collapsed_sections = set()
+        collapsed_sections = set(current_state.get('collapsed_sections', [])) if current_state else set()
     else:
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        
-        # Mapear ID de botón a nombre de sección
-        button_to_section = {
-            'heatmap-block-global': 'RENDIMIENTO GLOBAL',
-            'heatmap-block-estilo': 'ESTILO',
-            'heatmap-block-rendimiento-ofensivo': 'RENDIMIENTO OFENSIVO',
-            'heatmap-block-rendimiento-defensivo': 'RENDIMIENTO DEFENSIVO',
-            'heatmap-block-rendimiento-físico': 'RENDIMIENTO FÍSICO',
-            'heatmap-block-balón-parado': 'BALÓN PARADO'
-        }
-        
-        clicked_section = button_to_section.get(button_id)
-        
-        # Obtener secciones colapsadas actuales
+        # Si el disparo proviene de la creación inicial de los bloques (todos n_clicks = 0/None), no hacer nada
+        if button_id and button_id.startswith('{') and all((c is None or c == 0) for c in clicks_list):
+            return dash.no_update, dash.no_update
+        clicked_section = None
+        if button_id and button_id.startswith('{'):
+            import json
+            try:
+                id_obj = json.loads(button_id)
+                index = id_obj.get('index')
+                index_to_section = {
+                    'global': 'RENDIMIENTO GLOBAL',
+                    'estilo': 'ESTILO',
+                    'rendimiento-ofensivo': 'RENDIMIENTO OFENSIVO',
+                    'rendimiento-defensivo': 'RENDIMIENTO DEFENSIVO',
+                    'rendimiento-físico': 'RENDIMIENTO FÍSICO',
+                    'balón-parado': 'BALÓN PARADO'
+                }
+                clicked_section = index_to_section.get(index)
+            except Exception:
+                clicked_section = None
         collapsed_sections = set(current_state.get('collapsed_sections', [])) if current_state else set()
-        
         if clicked_section == 'RENDIMIENTO GLOBAL':
-            # Clic en Global: Colapsar/Expandir TODAS las secciones
             all_sections = ['ESTILO', 'RENDIMIENTO OFENSIVO', 'RENDIMIENTO DEFENSIVO', 'RENDIMIENTO FÍSICO', 'BALÓN PARADO']
-            
             if len(collapsed_sections) == len(all_sections):
-                # Ya están todas colapsadas → expandir todas
                 collapsed_sections = set()
             else:
-                # Algunas expandidas → colapsar todas
                 collapsed_sections = set(all_sections)
         elif clicked_section:
-            # Clic en sección individual
             if clicked_section in collapsed_sections:
-                # Si ya está colapsada, expandirla
                 collapsed_sections.discard(clicked_section)
             else:
-                # Si está expandida, colapsarla
                 collapsed_sections.add(clicked_section)
-    
-    # Reconstruir heatmap con el nombre del equipo seleccionado
-    heatmap_html = build_custom_heatmap_html(df, rankings_compuestos, collapsed_sections, selected_team)
-    
+    heatmap_html = build_custom_heatmap_html(df, rankings_compuestos, collapsed_sections, selected_team or 'RC Deportivo')
     return heatmap_html, {'collapsed_sections': list(collapsed_sections)}
 
 
@@ -1708,91 +1727,7 @@ def handle_team_selection(n_clicks_list, current_team):
 from dash import clientside_callback, ClientsideFunction
 
 clientside_callback(
-    """
-    function(n_clicks, selected_team) {
-        if (n_clicks && n_clicks > 0) {
-            // Esperar a que html2canvas esté disponible
-            setTimeout(function() {
-                if (typeof html2canvas === 'undefined') {
-                    alert('html2canvas no está cargado. Por favor, recarga la página.');
-                    return;
-                }
-                
-                const captureArea = document.getElementById('heatmap-capture-area');
-                if (!captureArea) {
-                    alert('No se encontró el área de captura.');
-                    return;
-                }
-                
-                // Obtener equipo seleccionado (por defecto RC Deportivo)
-                const teamName = selected_team || 'RC Deportivo';
-                
-                // Crear escudo temporalmente para la captura
-                const shield = document.createElement('img');
-                shield.id = 'temp-shield-for-capture';
-                shield.src = '/assets/Escudos/' + teamName + '.png';
-                shield.style.position = 'absolute';
-                shield.style.top = '10px';
-                shield.style.right = '10px';
-                shield.style.width = '80px';
-                shield.style.height = '80px';
-                shield.style.objectFit = 'contain';
-                shield.style.zIndex = '1000';
-                shield.style.backgroundColor = 'white';
-                shield.style.borderRadius = '8px';
-                shield.style.padding = '5px';
-                shield.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-                
-                // Añadir escudo al área de captura
-                captureArea.appendChild(shield);
-                
-                // Esperar a que la imagen cargue
-                shield.onload = function() {
-                    // Configuración de alta calidad para html2canvas
-                    html2canvas(captureArea, {
-                        scale: 2,  // Alta resolución (2x)
-                        useCORS: true,  // Permitir imágenes de otros dominios
-                        allowTaint: true,
-                        backgroundColor: '#ffffff',
-                        logging: false,
-                        width: captureArea.scrollWidth,
-                        height: captureArea.scrollHeight
-                    }).then(function(canvas) {
-                        // Eliminar escudo temporal
-                        captureArea.removeChild(shield);
-                        
-                        // Convertir canvas a blob y descargar
-                        canvas.toBlob(function(blob) {
-                            const url = URL.createObjectURL(blob);
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.download = teamName.replace(/ /g, '_') + '_Heatmap_Rendimiento.png';
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                            URL.revokeObjectURL(url);
-                        });
-                    }).catch(function(error) {
-                        // Eliminar escudo en caso de error
-                        if (captureArea.contains(shield)) {
-                            captureArea.removeChild(shield);
-                        }
-                        console.error('Error al capturar imagen:', error);
-                        alert('Error al generar la imagen. Por favor, inténtalo de nuevo.');
-                    });
-                };
-                
-                // Si la imagen no carga (error), eliminar el elemento
-                shield.onerror = function() {
-                    captureArea.removeChild(shield);
-                    alert('No se pudo cargar el escudo del equipo.');
-                };
-                
-            }, 300);  // Dar tiempo para que cargue html2canvas
-        }
-        return '';
-    }
-    """,
+    ClientsideFunction(namespace='heatmap', function_name='download_heatmap'),
     Output('download-trigger', 'children'),
     [Input('btn-download-heatmap', 'n_clicks')],
     [State('selected-team-store', 'data')],
@@ -1801,25 +1736,9 @@ clientside_callback(
 
 
 def build_layout_content_only():
-    """Retorna solo el contenido sin título ni wrapper de standard_page para ser embebido en otras páginas"""
-    df = fetch_indicadores_rendimiento()
-    
-    # Obtener rankings compuestos
-    try:
-        rankings_compuestos = get_rankings_compuestos_laliga("RC Deportivo")
-    except:
-        rankings_compuestos = {
-            'RankingGlobal': 4,
-            'RankingEstilo': 16,
-            'RankingOfensivo': 2,
-            'RankingDefensivo': 4,
-            'RankingFísico': 13,
-            'RankingBalónParado': 3
-        }
-    
-    # Construir heatmap HTML inicial (por defecto RC Deportivo)
-    heatmap_html = build_custom_heatmap_html(df, rankings_compuestos, set(), 'RC Deportivo')
-    
+    """Retorna solo el contenido sin título ni wrapper de standard_page para ser embebido en otras páginas.
+    Importante: no hace cómputo pesado aquí; el heatmap se genera vía callback para que el spinner sea visible.
+    """
     return html.Div([
         # Inyectar CSS para tooltips personalizados y html2canvas
         html.Div([
@@ -1827,12 +1746,40 @@ def build_layout_content_only():
             html.Script(src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js')
         ]),
         
+        # Toolbar de acciones (botón descarga) alineado a la derecha
+        html.Div([
+            html.Button(
+                html.Img(
+                    src='/assets/download.png',
+                    style={
+                        'width': '20px',
+                        'height': '20px',
+                        'objectFit': 'contain'
+                    }
+                ),
+                id='btn-download-heatmap',
+                title="Descargar Heatmap como PNG",
+                style={
+                    'backgroundColor': 'transparent',
+                    'border': 'none',
+                    'padding': '6px',
+                    'cursor': 'pointer',
+                    'display': 'flex',
+                    'alignItems': 'center',
+                    'justifyContent': 'center'
+                },
+                n_clicks=0
+            ),
+            # Div invisible para el callback
+            html.Div(id='download-trigger', style={'display': 'none'})
+        ], style={'display': 'flex', 'justifyContent': 'flex-end', 'gap': '8px', 'margin': '0px 0 0 0'}),
+        
         # Selector Premium de Equipos
         team_selector_premium(),
         
         # Store para guardar el estado de las secciones colapsadas
         dcc.Store(id='view-state-store', data={'collapsed_sections': []}),
-        
+
         # Contenedor del heatmap HTML personalizado con loader
         dcc.Loading(
             id='loading-heatmap',
@@ -1842,13 +1789,13 @@ def build_layout_content_only():
                 html.Div([
                     # Contenedor para captura (sin escudo visible inicialmente)
                     html.Div([
-                        # Contenedor del heatmap
+                        # Contenedor del heatmap (rellenado por callback)
                         html.Div(
                             id='custom-heatmap-container',
-                            children=[heatmap_html],
-                            style={'marginTop': '20px'}
+                            children=[html.Div(id='heatmap-initial-placeholder', style={'height': '260px'})],
+                            style={'marginTop': '5px', 'marginBottom': '0px'}
                         )
-                    ], id='heatmap-capture-area', style={'position': 'relative', 'backgroundColor': 'white', 'padding': '20px'}),
+                    ], id='heatmap-capture-area', style={'position': 'relative', 'backgroundColor': 'white', 'padding': '0px', 'paddingBottom': '0px', 'marginBottom': '0px'}),
                     
                     # Leyenda justo debajo del heatmap, alineada a la derecha
                     html.Div(
@@ -1858,25 +1805,27 @@ def build_layout_content_only():
                             'justifyContent': 'flex-end',
                             'marginTop': '5px',
                             'marginRight': '10px',
-                            'marginBottom': '5px',  # Reducido para acercar el evolutivo
+                            'marginBottom': '0px',
                             'backgroundColor': 'rgba(255, 255, 255, 0.96)',
-                            'padding': '8px 12px',
+                            'padding': '6px 10px',
                             'borderRadius': '6px',
                             'boxShadow': '0 2px 6px rgba(0,0,0,0.12)',
                             'border': '1px solid rgba(0,0,0,0.08)',
                             'width': 'fit-content',
                             'marginLeft': 'auto'
                         }
+                    ),
+                    # Descripción pegada a la leyenda (dentro del mismo contenedor)
+                    html.Div(
+                        description_block(),
+                        style={'marginTop': '4px', 'marginBottom': '0px'}
                     )
-                ])
-            ]
+                ], style={'marginBottom': '0px', 'paddingBottom': '0px', 'display': 'flex', 'flexDirection': 'column', 'gap': '4px'})
+            ],
+            style={'marginBottom': '0px', 'paddingBottom': '0px', 'minHeight': '0px'}
         ),
         
-        # Descripción después de la leyenda (fuera del loading)
-        html.Div(
-            description_block(),
-            style={'marginTop': '0px', 'marginBottom': '0px'}  # Pegado al heatmap
-        ),
+        
         
         # NUEVA SECCIÓN: Profundizar en una métrica
         html.Div([
@@ -1886,8 +1835,8 @@ def build_layout_content_only():
                            'color': '#1e3d59', 
                            'fontFamily': 'Montserrat, sans-serif',
                            'fontWeight': '600',
-                           'marginTop': '0px',  # Pegado a la descripción
-                           'marginBottom': '15px'
+                           'marginTop': '0px',
+                           'marginBottom': '10px'
                        }),
                 html.P("Selecciona una métrica para ver su evolución jornada a jornada:",
                       style={
@@ -1918,8 +1867,8 @@ def build_layout_content_only():
                 children=[html.Div(id='metric-evolution-graph', children=[])]
             )
         ], style={
-            'marginTop': '0px',  # Eliminado espacio superior
-            'padding': '15px',  # Reducido padding para más compacto
+            'marginTop': '10px',
+            'padding': '15px',
             'backgroundColor': 'rgba(248, 249, 250, 0.5)',
             'borderRadius': '8px'
         })
