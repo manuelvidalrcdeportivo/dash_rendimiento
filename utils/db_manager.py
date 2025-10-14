@@ -78,7 +78,7 @@ def get_all_athletes():
         
         
         query = """
-        SELECT id, first_name, last_name 
+        SELECT id, first_name, last_name, position_name
         FROM athletes 
         ORDER BY first_name, last_name
         """
@@ -95,6 +95,9 @@ def get_all_athletes():
             pass
         # Añadir columna para el nombre completo (para mostrar en UI)
         df['full_name'] = df['first_name'] + ' ' + df['last_name']
+        # Si position_name no existe, añadir columna vacía
+        if 'position_name' not in df.columns:
+            df['position_name'] = None
         return df
         
     except Exception as e:
@@ -1634,3 +1637,4 @@ def get_results_trend_statistics(team_name="RC Deportivo", competition_id=None, 
         import traceback
         traceback.print_exc()
         return {}
+

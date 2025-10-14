@@ -1,0 +1,207 @@
+/* ============================================
+   CALENDARIO CON INDICADORES DE PARTIDOS
+   ============================================ */
+
+/* Estilo general para días con partido */
+.match-day {
+    position: relative;
+    border: 2px solid #1e3d59 !important;
+    background-color: rgba(30, 61, 89, 0.05) !important;
+}
+
+/* Indicador de partido en el calendario */
+.match-indicator {
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #1e3d59;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: white;
+    font-weight: bold;
+}
+
+/* Tooltip para mostrar información del partido */
+.match-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.match-day:hover .match-tooltip {
+    opacity: 1;
+}
+
+/* ============================================
+   COMPONENTE DE PARTIDOS PRÓXIMOS
+   ============================================ */
+
+.matches-timeline {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 12px 0;
+    margin-top: 12px;
+}
+
+.match-card-mini {
+    min-width: 140px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.match-card-mini:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border-color: #1e3d59;
+}
+
+.match-card-mini.selected {
+    border-color: #1e3d59;
+    border-width: 2px;
+    background-color: rgba(30, 61, 89, 0.05);
+}
+
+.match-date-mini {
+    font-size: 11px;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.match-teams-mini {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.match-shield-mini {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.match-vs {
+    font-size: 10px;
+    color: #adb5bd;
+    font-weight: 600;
+}
+
+.match-location-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.match-location-badge.home {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.match-location-badge.away {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* ============================================
+   PANEL DE INFORMACIÓN DE PARTIDO
+   ============================================ */
+
+.match-info-panel {
+    background: linear-gradient(135deg, #1e3d59 0%, #2d5a7b 100%);
+    border-radius: 12px;
+    padding: 16px;
+    color: white;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 4px 12px rgba(30, 61, 89, 0.3);
+}
+
+.match-info-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.match-info-shield {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    background: white;
+    border-radius: 50%;
+    padding: 6px;
+}
+
+.match-info-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.match-info-opponent {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.match-info-date {
+    font-size: 12px;
+    opacity: 0.9;
+}
+
+.match-info-badge {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+    .matches-timeline {
+        gap: 8px;
+    }
+    
+    .match-card-mini {
+        min-width: 120px;
+        padding: 8px;
+    }
+    
+    .match-info-panel {
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+    }
+}
