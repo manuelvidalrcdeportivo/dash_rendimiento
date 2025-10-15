@@ -9,7 +9,7 @@ from utils.auth_db import validate_user_db, get_user_roles, get_user_id
 from utils.layouts import dashboard_layout
 
 # Importar layouts de páginas
-from pages.home import layout as home_layout
+from pages.home import get_layout as get_home_layout
 # Importación eliminada: from pages.jugadores import layout as jugadores_layout
 from pages.ficha_jugador import layout as ficha_jugador_layout
 from pages.rendimiento_fisico import layout as rendimiento_fisico_layout
@@ -90,6 +90,7 @@ def do_login(n_clicks, username, password):
             "user": username,
             "roles": roles
         }
+        # Redirigir siempre a /inicio después del login
         return session, user_id, "", "/inicio"
     return {"logged_in": False}, None, "Credenciales incorrectas", no_update
 
@@ -126,28 +127,30 @@ def display_subpage(pathname, session_data):
         return any(role in roles for role in required_roles)
 
     # Mostrar la página correspondiente según la ruta
-    if pathname in ["/", "/inicio"]:
-        return home_layout
+    # INICIO es accesible para todos los usuarios autenticados
+    # Usar None, "" o rutas vacías como inicio por defecto
+    if not pathname or pathname in ["/", "/inicio"]:
+        return get_home_layout(roles)
     elif pathname == "/ficha-jugador":
         if has_access(["admin", "direccion", "analista"]):
             return ficha_jugador_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/control-proceso-entrenamiento":
         # Compatibilidad: dirigir a SESIONES-MICROCICLOS
-        if has_access(["admin", "direccion", "analista"]):
+        if has_access(["admin", "direccion", "analista", "preparador"]):
             return rendimiento_fisico_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname in ["/rendimiento-fisico", "/seguimiento-carga"]:
         # Compatibilidad con la ruta anterior
-        if has_access(["admin", "direccion", "analista"]):
+        if has_access(["admin", "direccion", "analista", "preparador"]):
             return rendimiento_fisico_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/control-proceso-entrenamiento/sesiones-microciclos":
-        if has_access(["admin", "direccion", "analista"]):
+        if has_access(["admin", "direccion", "analista", "preparador"]):
             return rendimiento_fisico_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/control-proceso-entrenamiento/evolutivo-temporada":
-        if has_access(["admin", "direccion", "analista"]):
+        if has_access(["admin", "direccion", "analista", "preparador"]):
             return cpe_evolutivo_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/chicha-jugador":
@@ -168,7 +171,7 @@ def display_subpage(pathname, session_data):
             return rendimiento_individual_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/estado-funcional/capacidad":
-        if has_access(["admin", "direccion", "preparador"]):
+        if has_access(["admin", "direccion"]):
             return ef_capacidad_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/estado-funcional/medico":
@@ -188,8 +191,8 @@ def display_subpage(pathname, session_data):
         if "admin" in roles:
             return admin_layout
         return html.Div("No autorizado. Se requiere rol admin.", className="p-4 text-danger")
-    else:  # Cualquier otra ruta
-        return home_layout
+    else:  # Cualquier otra ruta - volver al inicio
+        return get_home_layout(roles)
 
 # -------------------- 4) toggles de secciones colapsables --------------------
 @app.callback(
@@ -301,11 +304,11 @@ def control_sidebar_visibility(session_data):
     # Control Proceso Competición - acceso: admin, direccion, analista
     crc_style = default_style if any(role in roles for role in ["admin", "direccion", "analista"]) else hidden_style
     
-    # Control Proceso Entrenamiento - acceso: admin, direccion, analista
-    cpe_style = default_style if any(role in roles for role in ["admin", "direccion", "analista"]) else hidden_style
+    # Control Proceso Entrenamiento - acceso: admin, direccion, analista, preparador
+    cpe_style = default_style if any(role in roles for role in ["admin", "direccion", "analista", "preparador"]) else hidden_style
     
-    # Control Estado Funcional - acceso: admin, direccion, medico, nutricion, psicologo, preparador
-    cef_style = default_style if any(role in roles for role in ["admin", "direccion", "medico", "nutricion", "psicologo", "preparador"]) else hidden_style
+    # Control Estado Funcional - acceso: admin, direccion, medico, nutricion, psicologo (NO preparador)
+    cef_style = default_style if any(role in roles for role in ["admin", "direccion", "medico", "nutricion", "psicologo"]) else hidden_style
     
     # Ficha Jugador - acceso: admin, direccion, analista
     ficha_style = default_style if any(role in roles for role in ["admin", "direccion", "analista"]) else hidden_style
@@ -344,8 +347,8 @@ def control_cef_subsections_visibility(session_data):
     # Psicológico - acceso: admin, direccion, psicologo
     psicologico_style = default_style if any(role in roles for role in ["admin", "direccion", "psicologo"]) else hidden_style
     
-    # Capacidad - acceso: admin, direccion, preparador
-    capacidad_style = default_style if any(role in roles for role in ["admin", "direccion", "preparador"]) else hidden_style
+    # Capacidad - acceso: admin, direccion (NO preparador)
+    capacidad_style = default_style if any(role in roles for role in ["admin", "direccion"]) else hidden_style
     
     return medico_style, antropometrico_style, psicologico_style, capacidad_style
 
@@ -358,12 +361,14 @@ def sidebar_user_info(session_data):
     if session_data and session_data.get("logged_in"):
         username = session_data.get("user", "")
         roles = session_data.get("roles", []) or []
+        # Capitalizar la primera letra de cada rol
+        roles_capitalized = [role.capitalize() for role in roles]
         return dbc.Container([
             html.Div([
                 html.I(className="fas fa-user me-2"),
                 html.Span(f"Usuario: {username}")
             ]),
-            html.Div(html.Small(", ".join(roles)), className="text-white-50 mt-1"),
+            html.Div(html.Small(", ".join(roles_capitalized)), className="text-white-50 mt-1"),
             dbc.Button("Cerrar sesión", id="logout-button", color="secondary", size="sm", className="w-100 mt-2")
         ], fluid=True)
     return ""
