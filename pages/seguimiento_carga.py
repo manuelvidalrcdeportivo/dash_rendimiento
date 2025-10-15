@@ -40,7 +40,8 @@ def get_semana_equipo_content():
                             id="sc-date-range",
                             display_format="YYYY-MM-DD",
                             start_date_placeholder_text="Inicio",
-                            end_date_placeholder_text="Fin"
+                            end_date_placeholder_text="Fin",
+                            first_day_of_week=1  # Lunes como primer día
                         ),
                     ])
                 ], width=12, lg=4, className="mb-2"),
@@ -218,7 +219,8 @@ def get_semana_jugadores_content():
                                 id="sj-date-range",
                                 display_format="YYYY-MM-DD",
                                 start_date_placeholder_text="Inicio",
-                                end_date_placeholder_text="Fin"
+                                end_date_placeholder_text="Fin",
+                                first_day_of_week=1  # Lunes como primer día
                             ),
                         ])
                     ], width=12, lg=4, className="mb-2"),
@@ -580,16 +582,19 @@ def generar_tabla_y_grafico_equipo(start_date, end_date, metric, atleta_ids_filt
         dias_ordenados.extend(sorted(dias_extra))
         
         # Usar todos los días con datos (crear copia explícita para evitar SettingWithCopyWarning)
-        df_grafico = df[['fecha', 'grupo_dia', 'jugador', 'jugador_id', 'valor']].copy()
+        # Necesitamos incluir activity_id para contar actividades
+        df_grafico = df_tabla[['fecha', 'grupo_dia', 'jugador', 'jugador_id', 'valor', 'activity_id']].copy()
         df_grafico.loc[:, "grupo_dia"] = pd.Categorical(df_grafico["grupo_dia"], categories=dias_ordenados, ordered=True)
         
-        # OPTIMIZACIÓN: Calcular estadísticas en una sola operación
+        # OPTIMIZACIÓN: Calcular estadísticas incluyendo actividades y fechas
         df_bar = df_grafico.groupby("grupo_dia", observed=True).agg({
             'valor': 'mean',
-            'jugador_id': 'nunique'
+            'jugador_id': 'nunique',
+            'activity_id': lambda x: x.nunique(),  # Número de actividades únicas
+            'fecha': lambda x: ', '.join(sorted(x.unique()))  # Fechas únicas
         }).reset_index()
         
-        df_bar.columns = ["grupo_dia", "valor", "num_jugadores"]
+        df_bar.columns = ["grupo_dia", "valor", "num_jugadores", "num_actividades", "fechas"]
         df_bar["jugadores"] = df_bar["num_jugadores"].astype(str)
         
         # Determinar la unidad de la métrica para las etiquetas
@@ -608,6 +613,8 @@ def generar_tabla_y_grafico_equipo(start_date, end_date, metric, atleta_ids_filt
             dia = row['grupo_dia']
             valor = row['valor']
             num_jugadores = row['num_jugadores']
+            num_actividades = row['num_actividades']
+            fechas = row['fechas']
             
             # Determinar si el día debe estar visible por defecto
             # Solo días MD-X (MD-6, MD-5, MD-4, MD-3, MD-2, MD-1) y MD están visibles por defecto
@@ -625,7 +632,14 @@ def generar_tabla_y_grafico_equipo(start_date, end_date, metric, atleta_ids_filt
                 text=[valor],
                 texttemplate=f"%{{text:.1f}}{unidad}",
                 textposition="outside",
-                hovertemplate=f"{dia}<br>{metrica_label} (Media): %{{y:.1f}}{unidad}<br>Jugadores: {num_jugadores}<extra></extra>",
+                hovertemplate=(
+                    f"<b>{dia}</b><br>"
+                    f"{metrica_label} (Media): <b>%{{y:.1f}}{unidad}</b><br>"
+                    f"Jugadores: {num_jugadores}<br>"
+                    f"Actividades: {num_actividades}<br>"
+                    f"Fechas: {fechas}"
+                    "<extra></extra>"
+                ),
                 visible=visible_por_defecto,
                 showlegend=True
             ))
