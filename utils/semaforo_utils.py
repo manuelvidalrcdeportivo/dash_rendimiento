@@ -182,7 +182,7 @@ def get_entrenamiento_status():
 
 def get_competicion_status():
     """
-    Estado rendimiento competición - basado en el Ranking Global de indicadores de rendimiento
+    Estado rendimiento competición - basado en el Ranking Rendimiento de indicadores de rendimiento
     Usa la misma lógica de colores que evolutivo temporada:
     - Ranking 1-6: Verde (ÓPTIMO)
     - Ranking 7-16: Amarillo (VIGILANCIA)
@@ -208,7 +208,7 @@ def get_competicion_status():
             ranking_position,
             metric_value
         FROM indicadores_rendimiento 
-        WHERE metric_id = 'RankingGlobal'
+        WHERE metric_id = 'RankingRendimiento'
         AND team_name = 'RC Deportivo'
         """
         
@@ -218,7 +218,7 @@ def get_competicion_status():
             return {
                 'color': '#6c757d',
                 'estado': 'SIN DATOS',
-                'detalle': 'No hay datos de Ranking Global disponibles'
+                'detalle': 'No hay datos de Ranking Rendimiento disponibles'
             }
         
         ranking = int(df.iloc[0]['ranking_position'])
@@ -228,15 +228,15 @@ def get_competicion_status():
         if ranking <= 6:
             color = '#28a745'  # Verde oscuro (igual que nutrición/médico)
             estado = 'ÓPTIMO'
-            descripcion = f'Ranking Global: {ranking}º posición (Top 6)'
+            descripcion = f'Ranking Rendimiento: {ranking}º posición (Top 6)'
         elif ranking <= 16:
             color = '#ffc107'  # Amarillo (igual que nutrición/médico)
             estado = 'VIGILANCIA'
-            descripcion = f'Ranking Global: {ranking}º posición (Medio-Alto)'
+            descripcion = f'Ranking Rendimiento: {ranking}º posición (Medio-Alto)'
         else:
             color = '#dc3545'  # Rojo (igual que nutrición/médico)
             estado = 'CRÍTICO'
-            descripcion = f'Ranking Global: {ranking}º posición (Descenso)'
+            descripcion = f'Ranking Rendimiento: {ranking}º posición (Descenso)'
         
         return {
             'color': color,

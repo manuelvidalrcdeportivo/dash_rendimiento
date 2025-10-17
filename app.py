@@ -28,6 +28,7 @@ from pages.rendimiento_individual import layout as rendimiento_individual_layout
 # Importar módulos para registrar sus callbacks
 import pages.contextos_partidos
 import pages.tendencia_resultados
+import pages.competicion_estilo
 # Comentamos las páginas que no usaremos por ahora
 # from pages.ficha_jugador import layout as ficha_jugador_layout
 # from pages.postpartido import layout as postpartido_layout

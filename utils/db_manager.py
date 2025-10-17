@@ -879,14 +879,28 @@ def get_rankings_compuestos_laliga(team_name="RC Deportivo"):
         if 'indicadores_rendimiento' not in inspector.get_table_names():
             return {}
         
-        # Consulta para obtener solo los rankings compuestos
+        # Consulta para obtener exactamente los rankings que necesitamos
+        # Para Rendimiento: RankingRendimiento, RankingOfensivo, RankingDefensivo, 
+        #                   RankingFísico-Combatividad, RankingBalónParado
+        # Para Estilo: RankingEstilo, RankingEstilo-IdentidadGeneral, 
+        #              RankingEstilo-IdentidadOfensiva, RankingEstilo-IdentidadDefensiva
         query = """
         SELECT 
             metric_id,
             ranking_position
         FROM indicadores_rendimiento 
         WHERE team_name = %s 
-        AND metric_category IN ('RANKINGS COMPUESTOS', 'RANKING GLOBAL')
+        AND metric_id IN (
+            'RankingRendimiento',
+            'RankingOfensivo',
+            'RankingDefensivo',
+            'RankingFísico-Combatividad',
+            'RankingBalónParado',
+            'RankingEstilo',
+            'RankingEstilo-IdentidadGeneral',
+            'RankingEstilo-IdentidadOfensiva',
+            'RankingEstilo-IdentidadDefensiva'
+        )
         ORDER BY metric_id
         """
         

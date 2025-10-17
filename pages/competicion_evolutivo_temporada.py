@@ -61,6 +61,222 @@ def filter_metrics_by_groups(df):
     
     return filtered_df
 
+
+# ============================================================================
+# FUNCIONES AUXILIARES PARA DIAGRAMA DE DISPERSIÓN RENDIMIENTO
+# ============================================================================
+
+def get_scatter_data_rendimiento(metric_x, metric_y):
+    """Obtiene datos para scatter plot de Rendimiento desde la BD"""
+    try:
+        engine = get_laliga_db_connection()
+        if not engine:
+            return None
+        
+        query = f"""
+        SELECT 
+            team_name,
+            metric_id,
+            metric_value
+        FROM indicadores_rendimiento
+        WHERE metric_id IN ('{metric_x}', '{metric_y}')
+        ORDER BY team_name, metric_id
+        """
+        
+        df = pd.read_sql(query, engine)
+        
+        if df.empty:
+            return None
+        
+        # Pivotar para tener una fila por equipo con ambas métricas
+        df_pivot = df.pivot(index='team_name', columns='metric_id', values='metric_value').reset_index()
+        
+        # Verificar que tenemos ambas columnas
+        if metric_x not in df_pivot.columns or metric_y not in df_pivot.columns:
+            return None
+        
+        return df_pivot
+        
+    except Exception as e:
+        print(f"Error obteniendo datos scatter rendimiento: {e}")
+        return None
+
+
+def create_scatter_plot_rendimiento(metric_x, metric_y, label_x, label_y, invert_y=False, custom_title=None):
+    """Crea un scatter plot de Rendimiento con escudos de equipos y líneas medias"""
+    
+    # Obtener datos
+    df = get_scatter_data_rendimiento(metric_x, metric_y)
+    
+    if df is None or df.empty:
+        return html.Div([
+            html.Div([
+                html.I(className="fas fa-exclamation-triangle fa-2x mb-3", style={"color": "#dc3545"}),
+                html.P("No hay datos disponibles para este diagrama", style={"color": "#6c757d"})
+            ], style={"textAlign": "center", "padding": "100px 20px"})
+        ])
+    
+    # Añadir jitter para evitar solapamientos
+    np.random.seed(42)
+    
+    # Calcular rangos
+    x_range = df[metric_x].max() - df[metric_x].min()
+    y_range = df[metric_y].max() - df[metric_y].min()
+    
+    # Añadir jitter muy pequeño (0.3% del rango)
+    df['x_jitter'] = df[metric_x] + np.random.uniform(-x_range*0.003, x_range*0.003, len(df))
+    df['y_jitter'] = df[metric_y] + np.random.uniform(-y_range*0.003, y_range*0.003, len(df))
+    
+    # Calcular medias para las líneas
+    mean_x = df[metric_x].mean()
+    mean_y = df[metric_y].mean()
+    
+    fig = go.Figure()
+    
+    # Añadir líneas medias punteadas
+    fig.add_hline(
+        y=mean_y, 
+        line_dash="dash", 
+        line_color="#6c757d",
+        line_width=2,
+        opacity=0.5
+    )
+    
+    fig.add_vline(
+        x=mean_x, 
+        line_dash="dash", 
+        line_color="#6c757d",
+        line_width=2,
+        opacity=0.5
+    )
+    
+    # Añadir puntos invisibles para el hover
+    for idx, row in df.iterrows():
+        team = row['team_name']
+        x_val = row['x_jitter']
+        y_val = row['y_jitter']
+        
+        fig.add_trace(go.Scatter(
+            x=[x_val],
+            y=[y_val],
+            mode='markers',
+            marker=dict(
+                size=35,
+                color='rgba(0,0,0,0)',
+                line=dict(width=0)
+            ),
+            hovertemplate=f'<b>{team}</b><br>' +
+                         f'{label_x}: %{{x:.2f}}<br>' +
+                         f'{label_y}: %{{y:.2f}}<extra></extra>',
+            showlegend=False,
+            name=team
+        ))
+    
+    # Añadir círculos azules para RC Deportivo
+    for idx, row in df.iterrows():
+        team = row['team_name']
+        if team == 'RC Deportivo':
+            x_val = row['x_jitter']
+            y_val = row['y_jitter']
+            
+            fig.add_trace(go.Scatter(
+                x=[x_val],
+                y=[y_val],
+                mode='markers',
+                marker=dict(
+                    size=65,
+                    color='rgba(0,0,0,0)',
+                    line=dict(width=4, color='#007bff')
+                ),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
+    
+    # Tamaño de las imágenes en unidades de datos (usar el rango menor para mantener proporción)
+    # Porcentaje ajustado para que sean similares a los de Estilo
+    min_range = min(x_range, y_range)
+    img_size_x = min_range * 1.2
+    img_size_y = min_range * 1.2
+    
+    # Añadir escudos como imágenes
+    images = []
+    for idx, row in df.iterrows():
+        team = row['team_name']
+        x_val = row['x_jitter']
+        y_val = row['y_jitter']
+        
+        images.append(dict(
+            source=f'/assets/Escudos/{team}.png',
+            xref="x",
+            yref="y",
+            x=x_val,
+            y=y_val,
+            sizex=img_size_x,
+            sizey=img_size_y,
+            xanchor="center",
+            yanchor="middle",
+            sizing="contain",
+            layer="above"
+        ))
+    
+    # Configurar rangos con margen
+    x_min = df[metric_x].min() - x_range * 0.08
+    x_max = df[metric_x].max() + x_range * 0.08
+    y_min = df[metric_y].min() - y_range * 0.08
+    y_max = df[metric_y].max() + y_range * 0.08
+    
+    # Sin anotaciones en los ejes
+    annotations = []
+    
+    # Configurar layout SIN título
+    fig.update_layout(
+        xaxis=dict(
+            title=dict(
+                text=f"<b>{label_x}</b>", 
+                font=dict(size=18, color='#1e3d59', family='Montserrat')
+            ),
+            gridcolor='rgba(233, 236, 239, 0.5)',
+            showgrid=True,
+            zeroline=False,
+            range=[x_min, x_max],
+            showticklabels=False,
+            ticks=""
+        ),
+        yaxis=dict(
+            title=dict(
+                text=f"<b>{label_y}</b>", 
+                font=dict(size=18, color='#1e3d59', family='Montserrat')
+            ),
+            gridcolor='rgba(233, 236, 239, 0.5)',
+            showgrid=True,
+            zeroline=False,
+            range=[y_min, y_max],
+            autorange='reversed' if invert_y else True,
+            showticklabels=False,
+            ticks=""
+        ),
+        images=images,
+        annotations=annotations,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        hovermode='closest',
+        height=750,
+        margin=dict(l=80, r=120, t=40, b=80),
+        font=dict(family='Montserrat'),
+        showlegend=False
+    )
+    
+    return dcc.Graph(
+        figure=fig,
+        config={'displayModeBar': False},
+        style={'height': '750px'}
+    )
+
+
+# ============================================================================
+# CONTINUACIÓN - FUNCIONES ORIGINALES
+# ============================================================================
+
 # ELIMINADAS funciones de fallback con datos falsos - nunca se deben mostrar datos inventados
 
 def fetch_indicadores_rendimiento(team_name="RC Deportivo"):
@@ -106,12 +322,6 @@ def _band_for_rank(rank: int) -> int:
 
 # Mapeo de nombres originales LaLiga a nombres cortos para visualización
 METRIC_NAME_MAPPING = {
-    # Estilo
-    "Iniciativa de Juego (Puntos)": "Iniciativa de Juego",
-    "Posesión del Balón (%)": "Posesión del Balón",
-    "Centroide colectivo global": "Centroide colectivo",
-    "Recuperaciones en campo contrario (% Total)": "% Recup. campo contrario",
-    
     # Rendimiento ofensivo
     "Eficacia Construcción Ofensiva (%)": "Eficacia Construcción Of. (%)",
     "Eficacia Finalización (%)": "Eficacia Finalización (%)",
@@ -124,10 +334,11 @@ METRIC_NAME_MAPPING = {
     "Expected Goals en Contra (xG)": "xG en Contra",
     "Goles en contra Totales (Nº)": "Goles en contra",
     
-    # Rendimiento físico
+    # Físico-Combatividad
     "Distancia Total Recorrida (m.)": "Distancia Total",
     "Distancia Recorrida > 21 km/h (m.)": "Distancia > 21 km/h",
     "Distancia High Sprint > 24 km/h (m.)": "Distancia > 24 km/h (m.)",
+    "% Duelos Aéreos Ganados": "% Duelos Aéreos",
     
     # Balón Parado
     "Goles a favor Balón Parado sin Penaltis (Nº)": "Goles B.P. F (N.P)",
@@ -138,12 +349,6 @@ METRIC_NAME_MAPPING = {
 
 # Definición de grupos usando nombres originales (para mapeo con BD)
 GROUPS_ORIGINAL = [
-    ("Estilo", [
-        "Iniciativa de Juego (Puntos)",
-        "Posesión del Balón (%)",
-        "Centroide colectivo global",
-        "Recuperaciones en campo contrario (% Total)",
-    ]),
     ("Rendimiento ofensivo", [
         "Eficacia Construcción Ofensiva (%)",
         "Eficacia Finalización (%)",
@@ -156,10 +361,11 @@ GROUPS_ORIGINAL = [
         "Expected Goals en Contra (xG)",
         "Goles en contra Totales (Nº)",
     ]),
-    ("Rendimiento físico", [
+    ("Físico-Combatividad", [
         "Distancia Total Recorrida (m.)",
         "Distancia Recorrida > 21 km/h (m.)",
         "Distancia High Sprint > 24 km/h (m.)",
+        "% Duelos Aéreos Ganados",
     ]),
     ("Balón Parado", [
          "Goles a favor Balón Parado sin Penaltis (Nº)",
@@ -172,12 +378,6 @@ GROUPS_ORIGINAL = [
 
 # Definición de grupos con nombres cortos (para visualización)
 GROUPS = [
-    ("Estilo", [
-        "Iniciativa de Juego",
-        "Posesión del Balón",
-        "Centroide colectivo",
-        "% Recup. campo contrario",
-    ]),
     ("Rendimiento ofensivo", [
         "Eficacia Construcción Of. (%)",
         "Eficacia Finalización (%)",
@@ -190,10 +390,11 @@ GROUPS = [
         "xG en Contra",
         "Goles en contra",
     ]),
-    ("Rendimiento físico", [
+    ("Físico-Combatividad", [
         "Distancia Total",
         "Distancia > 21 km/h",
         "Distancia > 24 km/h (m.)",
+        "% Duelos Aéreos",
     ]),
     ("Balón Parado", [
         "Goles B.P. F (N.P)",
@@ -205,10 +406,9 @@ GROUPS = [
 
 # Mapeo de nombres de grupos a metric_id de rankings compuestos
 GROUP_TO_RANKING_ID = {
-    "Estilo": "RankingEstilo",
     "Rendimiento ofensivo": "RankingOfensivo", 
     "Rendimiento defensivo": "RankingDefensivo",
-    "Rendimiento físico": "RankingFísico",
+    "Físico-Combatividad": "RankingFísico-Combatividad",
     "Balón Parado": "RankingBalónParado"
 }
 
@@ -274,10 +474,9 @@ def build_collapsed_metrics(df: pd.DataFrame, collapsed_sections: set) -> tuple:
     
     # Mapear secciones a sus rankings compuestos
     section_to_ranking = {
-        'ESTILO': 'RankingEstilo',
         'RENDIMIENTO OFENSIVO': 'RankingOfensivo', 
         'RENDIMIENTO DEFENSIVO': 'RankingDefensivo',
-        'RENDIMIENTO FÍSICO': 'RankingFísico',
+        'FÍSICO-COMBATIVIDAD': 'RankingFísico-Combatividad',
         'BALÓN PARADO': 'RankingBalónParado'
     }
     
@@ -559,8 +758,8 @@ def build_ranking_heatmap(df: pd.DataFrame, selected_view='expanded', collapsed_
     fig.update_yaxes(row=4, col=1, visible=False, range=[0, 1])
 
     # FILA 1: Rendimiento Global (arriba de todo)
-    if "RankingGlobal" in rankings_compuestos:
-        overall_ranking = int(rankings_compuestos["RankingGlobal"])
+    if "RankingRendimiento" in rankings_compuestos:
+        overall_ranking = int(rankings_compuestos["RankingRendimiento"])
     elif len(ranks) > 0:
         overall_ranking = float(np.mean(ranks))
     else:
@@ -575,7 +774,7 @@ def build_ranking_heatmap(df: pd.DataFrame, selected_view='expanded', collapsed_
             fillcolor=color_overall, line=dict(color='black', width=2),
             layer='above'
         )
-        overall_text = f"ESTILO-RENDIMIENTO GLOBAL ({overall_ranking:.0f})" if isinstance(overall_ranking, int) else f"ESTILO-RENDIMIENTO GLOBAL ({overall_ranking:.1f})"
+        overall_text = f"RENDIMIENTO GLOBAL ({overall_ranking:.0f})" if isinstance(overall_ranking, int) else f"RENDIMIENTO GLOBAL ({overall_ranking:.1f})"
         fig.add_annotation(
             x=0.5, y=0.5,
             xref='x domain', yref='y',
@@ -656,8 +855,7 @@ def get_section_display_name(section_name):
     name_map = {
         "Rendimiento ofensivo": "OFENSIVO",
         "Rendimiento defensivo": "DEFENSIVO",
-        "Rendimiento físico": "FÍSICO",
-        "Estilo": "ESTILO",
+        "Físico-Combatividad": "FÍSICO-COMBATIVIDAD",
         "Balón Parado": "BALÓN PARADO"
     }
     return name_map.get(section_name, section_name.upper())
@@ -782,16 +980,16 @@ def build_custom_heatmap_html(df, rankings_compuestos, collapsed_sections=None, 
     # Construir las métricas (SIEMPRE, para evitar errores de callback)
     current_col = 0
     
-    # Si TODO está colapsado, mostrar solo RankingGlobal
+    # Si TODO está colapsado, mostrar solo RankingRendimiento
     if all_collapsed:
-        global_ranking_value = rankings_compuestos.get('RankingGlobal', 4)
+        global_ranking_value = rankings_compuestos.get('RankingRendimiento', 4)
         metrics_display.append({
             'name': 'Rendimiento Global',
             'short_name': 'Global',
             'ranking': int(global_ranking_value),
             'is_composite': True,
             'colspan': len(all_section_names),  # Ocupa todo el ancho
-            'ranking_id': 'RankingGlobal'
+            'ranking_id': 'RankingRendimiento'
         })
         
         # Añadir grupos display vacíos para mantener estructura de callback
@@ -970,12 +1168,12 @@ def build_custom_heatmap_html(df, rankings_compuestos, collapsed_sections=None, 
         all_teams_rankings = {}
     
     # Construir HTML
-    global_ranking = rankings_compuestos.get('RankingGlobal', 4)
+    global_ranking = rankings_compuestos.get('RankingRendimiento', 4)
     
     return build_heatmap_components(metrics_display, groups_display, global_ranking, all_teams_rankings, team_name)
 
 
-def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings=None, team_name='RC Deportivo'):
+def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings=None, team_name='RC Deportivo', title_prefix='RENDIMIENTO GLOBAL'):
     """Construye los componentes HTML del heatmap - EXACTO a funcionalidad Plotly"""
     
     if all_teams_rankings is None:
@@ -987,7 +1185,7 @@ def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings
     
     # Bloque global
     global_block = html.Div(
-        f"ESTILO-RENDIMIENTO GLOBAL ({int(global_ranking)})",
+        f"{title_prefix} ({int(global_ranking)})",
         id={'type': 'heatmap-block', 'index': 'global'},
         style={
             'backgroundColor': _get_color_for_ranking(global_ranking),
@@ -1006,8 +1204,8 @@ def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings
     # Bloques de secciones - SIEMPRE presentes para evitar errores de callback
     section_blocks_items = []
     
-    # Detectar si es vista global (solo una métrica con RankingGlobal)
-    is_global_view = len(metrics) == 1 and metrics[0].get('ranking_id') == 'RankingGlobal'
+    # Detectar si es vista global (solo una métrica con RankingRendimiento)
+    is_global_view = len(metrics) == 1 and metrics[0].get('ranking_id') == 'RankingRendimiento'
     
     for group in groups:
         # Usar ancho visual para mantener proporción al colapsar
@@ -1047,7 +1245,7 @@ def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings
     global_view_block = None
     if is_global_view:
         global_view_block = html.Div(
-            f"RENDIMIENTO GLOBAL ({int(metrics[0]['ranking'])})",
+            f"{title_prefix} ({int(metrics[0]['ranking'])})",
             id='heatmap-block-rendimiento-global-visible',
             style={
                 'backgroundColor': _get_color_for_ranking(metrics[0]['ranking']),
@@ -1111,7 +1309,7 @@ def build_heatmap_components(metrics, groups, global_ranking, all_teams_rankings
                     'width': metric_width,  # Ancho basado en colspan
                     'padding': '8px 2px',
                     'fontFamily': 'Montserrat',
-                    'fontSize': '9px',
+                    'fontSize': '11px',
                     'fontWeight': '600',
                     'textAlign': 'center',
                     'borderBottom': '2px solid black',
@@ -1404,11 +1602,10 @@ def build_layout():
         rankings_compuestos = get_rankings_compuestos_laliga("RC Deportivo")
     except:
         rankings_compuestos = {
-            'RankingGlobal': 4,
-            'RankingEstilo': 16,
+            'RankingRendimiento': 4,
             'RankingOfensivo': 2,
             'RankingDefensivo': 4,
-            'RankingFísico': 13,
+            'RankingFísico-Combatividad': 13,
             'RankingBalónParado': 3
         }
     
@@ -1507,7 +1704,7 @@ def build_layout():
         # SECCIÓN: Evolutivo métricas estilo-rendimiento global
         html.Div([
             html.Div([
-                html.H5("Evolutivo métricas estilo-rendimiento global", 
+                html.H5("Evolutivo métricas rendimiento global", 
                        style={
                            'color': '#1e3d59', 
                            'fontFamily': 'Montserrat, sans-serif',
@@ -1573,11 +1770,10 @@ def build_initial_heatmap(selected_team, current_state):
         rankings_compuestos = get_rankings_compuestos_laliga(selected_team or 'RC Deportivo')
     except Exception:
         rankings_compuestos = {
-            'RankingGlobal': 4,
-            'RankingEstilo': 16,
+            'RankingRendimiento': 4,
             'RankingOfensivo': 2,
             'RankingDefensivo': 4,
-            'RankingFísico': 13,
+            'RankingFísico-Combatividad': 13,
             'RankingBalónParado': 3
         }
     collapsed_sections = set(current_state.get('collapsed_sections', [])) if current_state else set()
@@ -1588,18 +1784,62 @@ def build_initial_heatmap(selected_team, current_state):
 @callback(
     Output('custom-heatmap-container', 'children', allow_duplicate=True),
     Output('view-state-store', 'data', allow_duplicate=True),
-    [Input({'type': 'heatmap-block', 'index': ALL}, 'n_clicks'),
-     Input('selected-team-store', 'data')],
-    State('view-state-store', 'data'),
+    Input({'type': 'heatmap-block', 'index': ALL}, 'n_clicks'),
+    [State('view-state-store', 'data'),
+     State('selected-team-store', 'data')],
     prevent_initial_call=True
 )
-def handle_block_clicks(*args):
+def handle_block_clicks(clicks_list, current_state, selected_team):
     """Maneja clics en los bloques HTML para alternar secciones (solo después de que existen en el layout).
     Nota: ignora el primer disparo causado por la creación inicial de los componentes (n_clicks = 0/None).
     """
-    clicks_list = args[0] if isinstance(args[0], list) else []
-    selected_team = args[-2]
-    current_state = args[-1]
+    ctx = dash.callback_context
+    
+    # Si no hay trigger o todos los clicks son None/0, no hacer nada
+    if not ctx.triggered or all((c is None or c == 0) for c in clicks_list):
+        return dash.no_update, dash.no_update
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Si el trigger no es un botón de heatmap, no hacer nada
+    if not button_id or not button_id.startswith('{'):
+        return dash.no_update, dash.no_update
+    
+    import json
+    try:
+        id_obj = json.loads(button_id)
+        index = id_obj.get('index')
+        index_to_section = {
+            'global': 'RENDIMIENTO GLOBAL',
+            'rendimiento-ofensivo': 'RENDIMIENTO OFENSIVO',
+            'rendimiento-defensivo': 'RENDIMIENTO DEFENSIVO',
+            'rendimiento-físico': 'RENDIMIENTO FÍSICO',
+            'físico-combatividad': 'FÍSICO-COMBATIVIDAD',
+            'balón-parado': 'BALÓN PARADO'
+        }
+        clicked_section = index_to_section.get(index)
+    except Exception:
+        return dash.no_update, dash.no_update
+    
+    if not clicked_section:
+        return dash.no_update, dash.no_update
+    
+    # Actualizar secciones colapsadas
+    collapsed_sections = set(current_state.get('collapsed_sections', [])) if current_state else set()
+    
+    if clicked_section == 'RENDIMIENTO GLOBAL':
+        all_sections = ['RENDIMIENTO OFENSIVO', 'RENDIMIENTO DEFENSIVO', 'FÍSICO-COMBATIVIDAD', 'BALÓN PARADO']
+        if len(collapsed_sections) == len(all_sections):
+            collapsed_sections = set()
+        else:
+            collapsed_sections = set(all_sections)
+    elif clicked_section:
+        if clicked_section in collapsed_sections:
+            collapsed_sections.discard(clicked_section)
+        else:
+            collapsed_sections.add(clicked_section)
+    
+    # Obtener datos
     try:
         df = fetch_indicadores_rendimiento(selected_team)
     except Exception:
@@ -1608,50 +1848,13 @@ def handle_block_clicks(*args):
         rankings_compuestos = get_rankings_compuestos_laliga(selected_team or 'RC Deportivo')
     except Exception:
         rankings_compuestos = {
-            'RankingGlobal': 4,
-            'RankingEstilo': 16,
+            'RankingRendimiento': 4,
             'RankingOfensivo': 2,
             'RankingDefensivo': 4,
-            'RankingFísico': 13,
+            'RankingFísico-Combatividad': 13,
             'RankingBalónParado': 3
         }
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        collapsed_sections = set(current_state.get('collapsed_sections', [])) if current_state else set()
-    else:
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        # Si el disparo proviene de la creación inicial de los bloques (todos n_clicks = 0/None), no hacer nada
-        if button_id and button_id.startswith('{') and all((c is None or c == 0) for c in clicks_list):
-            return dash.no_update, dash.no_update
-        clicked_section = None
-        if button_id and button_id.startswith('{'):
-            import json
-            try:
-                id_obj = json.loads(button_id)
-                index = id_obj.get('index')
-                index_to_section = {
-                    'global': 'RENDIMIENTO GLOBAL',
-                    'estilo': 'ESTILO',
-                    'rendimiento-ofensivo': 'RENDIMIENTO OFENSIVO',
-                    'rendimiento-defensivo': 'RENDIMIENTO DEFENSIVO',
-                    'rendimiento-físico': 'RENDIMIENTO FÍSICO',
-                    'balón-parado': 'BALÓN PARADO'
-                }
-                clicked_section = index_to_section.get(index)
-            except Exception:
-                clicked_section = None
-        collapsed_sections = set(current_state.get('collapsed_sections', [])) if current_state else set()
-        if clicked_section == 'RENDIMIENTO GLOBAL':
-            all_sections = ['ESTILO', 'RENDIMIENTO OFENSIVO', 'RENDIMIENTO DEFENSIVO', 'RENDIMIENTO FÍSICO', 'BALÓN PARADO']
-            if len(collapsed_sections) == len(all_sections):
-                collapsed_sections = set()
-            else:
-                collapsed_sections = set(all_sections)
-        elif clicked_section:
-            if clicked_section in collapsed_sections:
-                collapsed_sections.discard(clicked_section)
-            else:
-                collapsed_sections.add(clicked_section)
+    
     heatmap_html = build_custom_heatmap_html(df, rankings_compuestos, collapsed_sections, selected_team or 'RC Deportivo')
     return heatmap_html, {'collapsed_sections': list(collapsed_sections)}
 
@@ -1774,6 +1977,49 @@ def build_layout_content_only():
             html.Div(id='download-trigger', style={'display': 'none'})
         ], style={'display': 'flex', 'justifyContent': 'flex-end', 'gap': '8px', 'margin': '0px 0 0 0'}),
         
+        # ====================================================================
+        # SECCIÓN: DIAGRAMA DE RENDIMIENTO
+        # ====================================================================
+        html.Div([
+            # Título del bloque
+            html.Div([
+                html.I(className="fas fa-chart-line me-2", style={"fontSize": "24px", "color": "#1e3d59"}),
+                html.H4("Diagrama de Rendimiento", style={"color": "#1e3d59", "display": "inline"})
+            ], className="mb-4"),
+            
+            # Contenedor del diagrama (sin box intermedia)
+            dcc.Loading(
+                id="loading-diagrama-rendimiento",
+                type="circle",
+                color="#1e3d59",
+                children=[
+                    html.Div(
+                        id="diagrama-rendimiento-container",
+                        children=[
+                            create_scatter_plot_rendimiento(
+                                metric_x="ValesrEfiOf",
+                                metric_y="ValesrEfiDef",
+                                label_x="Eficacia Ofensiva",
+                                label_y="Eficacia Defensiva",
+                                custom_title="Diagrama Vales de Rendimiento"
+                            )
+                        ]
+                    )
+                ]
+            )
+        ], style={"marginBottom": "40px"}),
+        
+        # Separador visual
+        html.Hr(style={'margin': '40px 0', 'borderTop': '2px solid #e9ecef'}),
+        
+        # ====================================================================
+        # SECCIÓN: PERFIL DE RENDIMIENTO
+        # ====================================================================
+        html.Div([
+            html.I(className="fas fa-chart-bar me-2", style={"fontSize": "24px", "color": "#1e3d59"}),
+            html.H4("Perfil de Rendimiento", style={"color": "#1e3d59", "display": "inline"})
+        ], className="mb-4"),
+        
         # Selector Premium de Equipos
         team_selector_premium(),
         
@@ -1825,39 +2071,41 @@ def build_layout_content_only():
             style={'marginBottom': '0px', 'paddingBottom': '0px', 'minHeight': '0px'}
         ),
         
+        # Separador visual
+        html.Hr(style={'margin': '40px 0', 'borderTop': '2px solid #e9ecef'}),
         
-        
-        # NUEVA SECCIÓN: Profundizar en una métrica
+        # ====================================================================
+        # SECCIÓN: EVOLUTIVO DE MÉTRICAS
+        # ====================================================================
         html.Div([
+            # Título del bloque
             html.Div([
-                html.H5("Evolutivo métricas estilo-rendimiento global", 
-                       style={
-                           'color': '#1e3d59', 
-                           'fontFamily': 'Montserrat, sans-serif',
-                           'fontWeight': '600',
-                           'marginTop': '0px',
-                           'marginBottom': '10px'
-                       }),
-                html.P("Selecciona una métrica para ver su evolución jornada a jornada:",
-                      style={
-                          'color': '#6c757d',
-                          'fontFamily': 'Montserrat, sans-serif',
-                          'marginBottom': '10px'
-                      }),
-                dcc.Dropdown(
-                    id='metric-evolution-selector',
-                    options=[
-                        {'label': METRIC_NAME_MAPPING[metric], 'value': metric}
-                        for group_name, metrics in GROUPS_ORIGINAL
-                        for metric in metrics
-                    ],
-                    placeholder='Selecciona una métrica...',
-                    style={
-                        'fontFamily': 'Montserrat, sans-serif',
-                        'marginBottom': '20px'
-                    }
-                )
-            ]),
+                html.I(className="fas fa-chart-area me-2", style={"fontSize": "24px", "color": "#1e3d59"}),
+                html.H4("Evolutivo de Métricas", style={"color": "#1e3d59", "display": "inline"})
+            ], className="mb-4"),
+            
+            # Contenedor del evolutivo (sin box intermedia)
+            html.P("Selecciona una métrica para ver su evolución jornada a jornada:",
+                  style={
+                      'color': '#6c757d',
+                      'fontFamily': 'Montserrat, sans-serif',
+                      'marginBottom': '15px',
+                      'fontSize': '14px'
+                  }),
+            dcc.Dropdown(
+                id='metric-evolution-selector',
+                options=[
+                    {'label': METRIC_NAME_MAPPING[metric], 'value': metric}
+                    for group_name, metrics in GROUPS_ORIGINAL
+                    for metric in metrics
+                ],
+                value=GROUPS_ORIGINAL[0][1][0] if GROUPS_ORIGINAL else None,  # Primera métrica por defecto
+                placeholder='Selecciona una métrica...',
+                style={
+                    'fontFamily': 'Montserrat, sans-serif',
+                    'marginBottom': '20px'
+                }
+            ),
             
             # Contenedor del gráfico evolutivo con loading
             dcc.Loading(
@@ -1866,12 +2114,7 @@ def build_layout_content_only():
                 color='#1e3d59',
                 children=[html.Div(id='metric-evolution-graph', children=[])]
             )
-        ], style={
-            'marginTop': '10px',
-            'padding': '15px',
-            'backgroundColor': 'rgba(248, 249, 250, 0.5)',
-            'borderRadius': '8px'
-        })
+        ], style={"marginBottom": "40px"})
     ])
 
 

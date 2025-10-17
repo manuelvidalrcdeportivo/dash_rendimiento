@@ -16,10 +16,78 @@ def get_tendencia_resultados_content():
     from pages.tendencia_resultados import get_tendencia_resultados_content as get_tendencia_content
     return get_tendencia_content()
 
-def get_perfil_estilo_rendimiento_content():
-    """Contenido de la pestaña Perfil Estilo-Rendimiento - Reutiliza evolutivo temporada sin título"""
-    # Obtener solo el contenido sin título ni wrapper
+def get_perfil_estilo_content():
+    """Contenido de la sub-pestaña Estilo - Importa desde competicion_estilo.py"""
+    from pages.competicion_estilo import get_estilo_content
+    return html.Div(get_estilo_content(), style={'padding': '10px 15px'})
+
+def get_perfil_rendimiento_content():
+    """Contenido de la sub-pestaña Rendimiento - Reutiliza evolutivo temporada sin título"""
     return html.Div(get_evolutivo_temporada_content(), style={'padding': '10px 15px'})
+
+def get_perfil_estilo_rendimiento_content():
+    """Contenido de la pestaña Perfil Estilo-Rendimiento con sub-navegación"""
+    return html.Div([
+        # Sub-navegación para Perfil Estilo-Rendimiento
+        html.Div([
+            html.Div([
+                html.Button(
+                    "Perfil Estilo",
+                    id="subtab-per-estilo",
+                    className="subtab-button",
+                    style={
+                        "backgroundColor": "#1e3d59",
+                        "color": "white",
+                        "border": "none",
+                        "borderRadius": "6px",
+                        "padding": "12px 50px",
+                        "fontWeight": "600",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "marginRight": "10px",
+                        "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
+                        "minWidth": "360px"
+                    }
+                ),
+                html.Button(
+                    "Perfil Rendimiento",
+                    id="subtab-per-rendimiento",
+                    className="subtab-button",
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "color": "#6c757d",
+                        "border": "1px solid #e9ecef",
+                        "borderRadius": "6px",
+                        "padding": "12px 50px",
+                        "fontWeight": "500",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "marginRight": "10px",
+                        "minWidth": "360px"
+                    }
+                )
+            ], style={
+                "display": "flex",
+                "justifyContent": "center",
+                "alignItems": "center",
+                "padding": "20px 0",
+                "borderBottom": "1px solid #e9ecef"
+            })
+        ], style={
+            "backgroundColor": "white",
+            "marginBottom": "20px"
+        }),
+        
+        # Contenido dinámico según sub-pestaña seleccionada
+        html.Div([
+            html.Div(
+                id="per-subtab-content",
+                children=get_perfil_estilo_content()  # Por defecto mostrar Estilo
+            )
+        ], className="p-0")
+    ])
 
 def get_uso_aprovechamiento_content():
     """Contenido de la pestaña Uso Aprovechamiento de Plantilla"""
@@ -406,6 +474,73 @@ def update_mf_subtabs(n_goles, n_eficacia, n_funcionalidad, n_fisico):
     return styles[0], styles[1], styles[2], styles[3], content
 
 
+# Callback para manejar el cambio de sub-pestañas en Perfil Estilo-Rendimiento
+@callback(
+    [Output("subtab-per-estilo", "style"),
+     Output("subtab-per-rendimiento", "style"),
+     Output("per-subtab-content", "children")],
+    [Input("subtab-per-estilo", "n_clicks"),
+     Input("subtab-per-rendimiento", "n_clicks")]
+)
+def update_per_subtabs(n_estilo, n_rendimiento):
+    """Actualiza las sub-pestañas de Perfil Estilo-Rendimiento"""
+    
+    # Estilos
+    style_inactive = {
+        "backgroundColor": "#f8f9fa",
+        "color": "#6c757d",
+        "border": "1px solid #e9ecef",
+        "borderRadius": "6px",
+        "padding": "12px 50px",
+        "fontWeight": "500",
+        "fontSize": "14px",
+        "cursor": "pointer",
+        "transition": "all 0.2s ease",
+        "marginRight": "10px",
+        "minWidth": "360px"
+    }
+    
+    style_active = {
+        "backgroundColor": "#1e3d59",
+        "color": "white",
+        "border": "none",
+        "borderRadius": "6px",
+        "padding": "12px 50px",
+        "fontWeight": "600",
+        "fontSize": "14px",
+        "cursor": "pointer",
+        "transition": "all 0.2s ease",
+        "marginRight": "10px",
+        "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
+        "minWidth": "360px"
+    }
+    
+    # Detectar qué botón fue clickeado
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        active_subtab = 0  # Estilo por defecto
+    else:
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        if button_id == 'subtab-per-estilo':
+            active_subtab = 0
+        elif button_id == 'subtab-per-rendimiento':
+            active_subtab = 1
+        else:
+            active_subtab = 1
+    
+    # Establecer estilos
+    styles = [style_inactive] * 2
+    styles[active_subtab] = style_active
+    
+    # Establecer contenido
+    if active_subtab == 0:
+        content = get_perfil_estilo_content()
+    else:
+        content = get_perfil_rendimiento_content()
+    
+    return styles[0], styles[1], content
+
+
 # Callback para manejar el cambio de pestañas
 @callback(
     [Output("tab-rc-tendencia", "style"),
@@ -457,8 +592,8 @@ def update_tabs(n_clicks_tendencia, n_clicks_perfil, n_clicks_aprovechamiento, n
     # Detectar qué botón fue clickeado usando callback_context
     ctx = dash.callback_context
     if not ctx.triggered:
-        # Carga inicial: mostrar segunda pestaña (Perfil Estilo Rendimiento)
-        active_tab = 1
+        # Carga inicial: mostrar primera pestaña (Tendencia Resultados)
+        active_tab = 0
     else:
         # Obtener el ID del botón que disparó el callback
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
