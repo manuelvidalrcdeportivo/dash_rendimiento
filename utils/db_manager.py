@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 import sys
 import traceback
+from datetime import datetime, timedelta
 
 # Cargar variables de entorno para las credenciales de la base de datos
 load_dotenv()
@@ -222,14 +223,16 @@ def get_activities_by_date_range(start_timestamp, end_timestamp):
         start_timestamp (int): timestamp UNIX inicio
         end_timestamp (int): timestamp UNIX fin
     Returns:
-        DataFrame con actividades filtradas
+        DataFrame con actividades filtradas (solo columnas esenciales para optimizar)
     """
     try:
         engine = get_db_connection()
         if engine is None:
             return pd.DataFrame()
+        # Optimización: Solo seleccionar columnas necesarias en lugar de SELECT *
         query = '''
-            SELECT * FROM activities
+            SELECT id, start_time, name, tag_list_json
+            FROM activities
             WHERE start_time >= %s AND start_time <= %s
             ORDER BY start_time ASC
         '''
@@ -261,6 +264,9 @@ def get_participants_for_activities(activity_ids):
         
         return pd.DataFrame(columns=["activity_id", "athlete_id"])
 
+# Cache para días de referencia (evitar consultas repetidas)
+_DIAS_REF_CACHE = None
+
 def add_grupo_dia_column(actividades_df):
     """
     Añade una columna 'grupo_dia' al DataFrame de actividades, SOLO usando los tags de tipo 'DayCode' (tag_type_id == '09bdd0ac-3477-11ef-8148-06e64249fcaf').
@@ -269,15 +275,20 @@ def add_grupo_dia_column(actividades_df):
     """
     import json
     import re
+    global _DIAS_REF_CACHE
     DAYCODE_TAG_TYPE_ID = '09bdd0ac-3477-11ef-8148-06e64249fcaf'
     try:
         engine = get_db_connection()
         if engine is None or actividades_df.empty or 'tag_list_json' not in actividades_df.columns:
             actividades_df['grupo_dia'] = 'Sin clasificar'
             return actividades_df
-        # Obtener todos los nombres de días de referencia para DayCode desde activity_tags
-        tags_df = pd.read_sql(f"SELECT DISTINCT name FROM activity_tags WHERE tag_type_id = '{DAYCODE_TAG_TYPE_ID}'", engine)
-        dias_ref = set(tags_df['name'].dropna().tolist())
+        
+        # Optimización: Cachear días de referencia para no consultar cada vez
+        if _DIAS_REF_CACHE is None:
+            tags_df = pd.read_sql(f"SELECT DISTINCT name FROM activity_tags WHERE tag_type_id = '{DAYCODE_TAG_TYPE_ID}'", engine)
+            _DIAS_REF_CACHE = set(tags_df['name'].dropna().tolist())
+        
+        dias_ref = _DIAS_REF_CACHE
         # Función para extraer el grupo_dia de tag_list_json SOLO si tag_type_id es el de DayCode
         def extraer_grupo_dia(tag_json_str):
             try:
@@ -342,18 +353,23 @@ def get_metrics_for_activities_and_athletes(activity_ids, athlete_ids, parameter
         engine = get_db_connection()
         if engine is None or not activity_ids or not athlete_ids:
             return pd.DataFrame(columns=["activity_id", "athlete_id", "parameter_value"])
+        
+        # Optimización: Usar índices y filtrar primero por parameter_name (más selectivo)
+        # Convertir a CAST para asegurar tipo numérico en parameter_value
         query = '''
-            SELECT activity_id, athlete_id, parameter_value
+            SELECT activity_id, athlete_id, CAST(parameter_value AS DECIMAL(10,2)) as parameter_value
             FROM activity_athlete_metrics
-            WHERE activity_id IN %s AND athlete_id IN %s AND parameter_name = %s
+            WHERE parameter_name = %s 
+            AND activity_id IN %s 
+            AND athlete_id IN %s
         '''
-        df = pd.read_sql(query, engine, params=(tuple(activity_ids), tuple(athlete_ids), parameter_name))
+        df = pd.read_sql(query, engine, params=(parameter_name, tuple(activity_ids), tuple(athlete_ids)))
         return df
     except Exception as e:
         
         return pd.DataFrame(columns=["activity_id", "athlete_id", "parameter_value"])
 
-# Función para obtener los parámetros disponibles (aunque por ahora solo es total_distance)
+# Función para obtener los parámetros disponibles
 def get_available_parameters():
     """
     Devuelve la lista de parámetros disponibles para seleccionar.
@@ -363,10 +379,12 @@ def get_available_parameters():
         Lista de parámetros disponibles con su valor interno y etiqueta para mostrar.
     """
     return [
-        {'value': 'total_distance', 'label': 'Distancia Media Sesión (m)'},
-        {'value': 'velocity_band6_total_distance', 'label': 'Velocity Band 6 Distance (Session) (m)'},
-        {'value': 'high_speed_distance', 'label': 'HSR Distance (m)'},
-        {'value': 'average_player_load', 'label': 'Average Player Load'}
+        {'value': 'total_distance', 'label': 'Distancia Total (m)'},
+        {'value': 'distancia_+21_km/h_(m)', 'label': 'Distancia +21km/h (m)'},
+        {'value': 'distancia_+24_km/h_(m)', 'label': 'Distancia +24km/h (m)'},
+        {'value': 'distancia+28_(km/h)', 'label': 'Distancia +28km/h (m)'},
+        {'value': 'gen2_acceleration_band7plus_total_effort_count', 'label': 'Aceleraciones'},
+        {'value': 'average_player_load', 'label': 'Player Load'}
     ]
     
 def get_variable_thresholds(variable_name):
@@ -387,8 +405,10 @@ def get_variable_thresholds(variable_name):
         # Mapeo de variables internas a nombres en la tabla de umbrales
         variable_mappings = {
             'total_distance': 'Average Distance (Session) (m)',
-            'velocity_band6_total_distance': 'Velocity Band Band 6 Distance (Session) (m)',
-            'high_speed_distance': 'HSR Distance (m)',
+            'distancia_+21_km/h_(m)': 'HSR Distance (m)',
+            'distancia_+24_km/h_(m)': 'Velocity Band Band 6 Distance (Session) (m)',
+            'distancia+28_(km/h)': 'Distancia +28km/h (m)',  # Sin umbrales en BD
+            'gen2_acceleration_band7plus_total_effort_count': 'Aceleraciones',  # Sin umbrales en BD
             'average_player_load': 'Average Player Load'
         }
         
@@ -1651,4 +1671,143 @@ def get_results_trend_statistics(team_name="RC Deportivo", competition_id=None, 
         import traceback
         traceback.print_exc()
         return {}
+
+# --------------------------------------
+# FUNCIONES PARA MICROCICLOS
+# --------------------------------------
+def get_microciclos():
+    """
+    Obtiene todos los microciclos estructurados por partidos MD.
+    Un microciclo es el periodo entre un MD y el siguiente MD (o hasta hoy si es la semana actual).
+    
+    Returns:
+        Lista de diccionarios con:
+        - id: identificador único del microciclo
+        - label: etiqueta para mostrar "Semana + nombre_partido (fecha_inicio - fecha_fin)"
+        - start_date: fecha de inicio del microciclo (formato YYYY-MM-DD)
+        - end_date: fecha de fin del microciclo (formato YYYY-MM-DD)
+        - partido_nombre: nombre del partido que cierra el microciclo
+        - is_current: True si es la semana actual (sin MD de cierre)
+    """
+    from datetime import datetime, timedelta
+    import json
+    
+    try:
+        engine = get_db_connection()
+        if engine is None:
+            return []
+        
+        # Calcular timestamp de hace 6 meses para limitar la búsqueda
+        hace_6_meses = int((datetime.now() - timedelta(days=180)).timestamp())
+        
+        # Obtener solo actividades de los últimos 6 meses (OPTIMIZACIÓN)
+        query = f'''
+            SELECT id, start_time, name, tag_list_json
+            FROM activities
+            WHERE start_time >= {hace_6_meses}
+            ORDER BY start_time ASC
+        '''
+        df = pd.read_sql(query, engine)
+        
+        if df.empty:
+            return []
+        
+        # Añadir columna grupo_dia para identificar MDs
+        df = add_grupo_dia_column(df)
+        
+        # Filtrar solo actividades MD (partidos)
+        df_md = df[df['grupo_dia'] == 'MD'].copy()
+        
+        if df_md.empty:
+            return []
+        
+        microciclos = []
+        
+        # Procesar cada partido MD como el objetivo del microciclo (preparación hacia ese partido)
+        # El microciclo INCLUYE el MD anterior (que lo inicia) pero NO incluye el MD del título
+        for idx, row in df_md.iterrows():
+            md_timestamp = row['start_time']
+            md_date = datetime.fromtimestamp(md_timestamp)
+            partido_nombre = row['name'] if pd.notna(row['name']) else f"Partido {md_date.strftime('%d/%m/%Y')}"
+            
+            # Encontrar la fecha de inicio del microciclo (INCLUIR el MD anterior)
+            if idx > 0:
+                # Buscar el índice del MD anterior
+                md_prev_idx = df_md.index[df_md.index < idx].max() if len(df_md.index[df_md.index < idx]) > 0 else None
+                
+                if md_prev_idx is not None:
+                    # INCLUIR el MD anterior (ese partido inicia el microciclo)
+                    prev_md_timestamp = df_md.loc[md_prev_idx, 'start_time']
+                    start_timestamp = prev_md_timestamp
+                else:
+                    # Primer microciclo: tomar todas las actividades ANTES del primer MD
+                    df_antes_md = df[df['start_time'] < md_timestamp]
+                    if not df_antes_md.empty:
+                        start_timestamp = df_antes_md['start_time'].min()
+                    else:
+                        start_timestamp = md_timestamp - 604800  # -7 días por defecto
+            else:
+                # Primer MD: buscar actividades previas (sin incluir el MD)
+                df_antes_md = df[df['start_time'] < md_timestamp]
+                if not df_antes_md.empty:
+                    start_timestamp = df_antes_md['start_time'].min()
+                else:
+                    start_timestamp = md_timestamp - 604800  # -7 días por defecto
+            
+            # La fecha de fin es ANTES del MD actual (el microciclo NO incluye el partido)
+            # Buscar la última actividad antes del MD
+            df_antes_este_md = df[df['start_time'] < md_timestamp]
+            if not df_antes_este_md.empty:
+                end_timestamp = df_antes_este_md['start_time'].max()
+                end_date = datetime.fromtimestamp(end_timestamp)
+                # Para queries, usar el día del MD (sin incluir el MD mismo, solo hasta las 23:59 del día anterior)
+                end_date_for_query = datetime.fromtimestamp(md_timestamp - 1)  # 1 segundo antes del MD
+            else:
+                # Si no hay actividades antes, usar el día anterior al MD
+                end_date = datetime.fromtimestamp(md_timestamp - 86400)
+                end_date_for_query = datetime.fromtimestamp(md_timestamp - 1)
+            
+            start_date = datetime.fromtimestamp(start_timestamp)
+            
+            microciclo = {
+                'id': f'mc_{idx}',
+                'label': f"Semana {partido_nombre} ({start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')})",
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': end_date_for_query.strftime('%Y-%m-%d %H:%M:%S'),  # Timestamp exacto para excluir el MD
+                'partido_nombre': partido_nombre,
+                'is_current': False
+            }
+            
+            microciclos.append(microciclo)
+        
+        # Añadir "Semana actual" (desde el último MD incluido hasta hoy)
+        if not df_md.empty:
+            ultimo_md_timestamp = df_md['start_time'].max()
+            
+            # La semana actual INCLUYE el último MD (que la inicia)
+            start_timestamp = ultimo_md_timestamp
+            start_date = datetime.fromtimestamp(start_timestamp)
+            end_date = datetime.now()
+            
+            microciclo_actual = {
+                'id': 'mc_actual',
+                'label': f"Semana Actual ({start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')})",
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': end_date.strftime('%Y-%m-%d %H:%M:%S'),
+                'partido_nombre': 'Semana Actual',
+                'is_current': True
+            }
+            
+            microciclos.append(microciclo_actual)
+        
+        # Invertir para que el más reciente esté primero
+        microciclos.reverse()
+        
+        return microciclos
+        
+    except Exception as e:
+        print(f"Error obteniendo microciclos: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
