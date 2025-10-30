@@ -242,27 +242,68 @@ def get_activities_by_date_range(start_timestamp, end_timestamp):
         
         return pd.DataFrame()
 
-def get_participants_for_activities(activity_ids):
+def get_participants_for_activities(activity_ids, include_participation_tags=False):
     """
     Devuelve los jugadores participantes en una lista de actividades.
     Args:
         activity_ids (list): lista de activity_id
+        include_participation_tags (bool): Si True, incluye columna participation_type
     Returns:
-        DataFrame con columnas: activity_id, athlete_id
+        DataFrame con columnas: activity_id, athlete_id [, participation_type]
+        participation_type puede ser: 'Full', 'Part', 'Rehab', o None
     """
     try:
         engine = get_db_connection()
         if engine is None or not activity_ids:
-            return pd.DataFrame(columns=["activity_id", "athlete_id"])
-        query = '''
-            SELECT activity_id, athlete_id FROM activity_athletes
-            WHERE activity_id IN %s
-        '''
+            cols = ["activity_id", "athlete_id"]
+            if include_participation_tags:
+                cols.append("participation_type")
+            return pd.DataFrame(columns=cols)
+        
+        if include_participation_tags:
+            query = '''
+                SELECT activity_id, athlete_id, tags_json FROM activity_athletes
+                WHERE activity_id IN %s
+            '''
+        else:
+            query = '''
+                SELECT activity_id, athlete_id FROM activity_athletes
+                WHERE activity_id IN %s
+            '''
         df = pd.read_sql(query, engine, params=(tuple(activity_ids),))
+        
+        # Si se solicitan tags de participación, parsear tags_json
+        if include_participation_tags and not df.empty and 'tags_json' in df.columns:
+            df['participation_type'] = df['tags_json'].apply(_extract_participation_tag)
+            df = df.drop(columns=['tags_json'])
+        
         return df
     except Exception as e:
-        
-        return pd.DataFrame(columns=["activity_id", "athlete_id"])
+        print(f"Error getting participants: {e}")
+        cols = ["activity_id", "athlete_id"]
+        if include_participation_tags:
+            cols.append("participation_type")
+        return pd.DataFrame(columns=cols)
+
+def _extract_participation_tag(tags_json_str):
+    """
+    Extrae el tag de participación del JSON de tags.
+    Busca tags con tag_type_name == 'Participation'
+    Retorna: 'Full', 'Part', 'Rehab', o None
+    """
+    import json
+    
+    if pd.isna(tags_json_str) or tags_json_str == '' or tags_json_str is None:
+        return None  # Sin tag = consideramos Full por defecto
+    
+    try:
+        tags = json.loads(tags_json_str)
+        for tag in tags:
+            if tag.get('tag_type_name') == 'Participation' or tag.get('tag_type_id') == '09fd58ee-3477-11ef-8148-06e64249fcaf':
+                return tag.get('name')  # 'Full', 'Part', 'Rehab'
+        return None  # Sin tag de participación = Full por defecto
+    except:
+        return None
 
 # Cache para días de referencia (evitar consultas repetidas)
 _DIAS_REF_CACHE = None
@@ -369,6 +410,38 @@ def get_metrics_for_activities_and_athletes(activity_ids, athlete_ids, parameter
         
         return pd.DataFrame(columns=["activity_id", "athlete_id", "parameter_value"])
 
+def get_field_time_for_activities(activity_ids, athlete_ids):
+    """
+    Obtiene el field_time (tiempo en campo) para jugadores en actividades específicas.
+    Args:
+        activity_ids (list): lista de activity_id
+        athlete_ids (list): lista de athlete_id
+    Returns:
+        DataFrame con columnas: activity_id, athlete_id, field_time (en segundos)
+    """
+    try:
+        engine = get_db_connection()
+        if engine is None or not activity_ids or not athlete_ids:
+            return pd.DataFrame(columns=["activity_id", "athlete_id", "field_time"])
+        
+        query = '''
+            SELECT 
+                activity_id, 
+                athlete_id, 
+                CAST(parameter_value AS DECIMAL(10,2)) as field_time
+            FROM activity_athlete_metrics
+            WHERE parameter_name = 'field_time'
+            AND activity_id IN %s 
+            AND athlete_id IN %s
+            AND parameter_value IS NOT NULL
+            AND parameter_value != ''
+        '''
+        df = pd.read_sql(query, engine, params=(tuple(activity_ids), tuple(athlete_ids)))
+        return df
+    except Exception as e:
+        print(f"Error getting field_time: {e}")
+        return pd.DataFrame(columns=["activity_id", "athlete_id", "field_time"])
+
 # Función para obtener los parámetros disponibles
 def get_available_parameters():
     """
@@ -380,11 +453,10 @@ def get_available_parameters():
     """
     return [
         {'value': 'total_distance', 'label': 'Distancia Total (m)'},
-        {'value': 'distancia_+21_km/h_(m)', 'label': 'Distancia +21km/h (m)'},
-        {'value': 'distancia_+24_km/h_(m)', 'label': 'Distancia +24km/h (m)'},
-        {'value': 'distancia+28_(km/h)', 'label': 'Distancia +28km/h (m)'},
-        {'value': 'gen2_acceleration_band7plus_total_effort_count', 'label': 'Aceleraciones'},
-        {'value': 'average_player_load', 'label': 'Player Load'}
+        {'value': 'distancia_21_kmh', 'label': 'Distancia +21km/h (m)'},
+        {'value': 'distancia_24_kmh', 'label': 'Distancia +24km/h (m)'},
+        {'value': 'acc_dec_total', 'label': 'Aceleraciones/Deceleraciones +3'},
+        {'value': 'ritmo_medio', 'label': 'Ritmo Medio (m/min)'}
     ]
     
 def get_variable_thresholds(variable_name):
@@ -405,11 +477,10 @@ def get_variable_thresholds(variable_name):
         # Mapeo de variables internas a nombres en la tabla de umbrales
         variable_mappings = {
             'total_distance': 'Average Distance (Session) (m)',
-            'distancia_+21_km/h_(m)': 'HSR Distance (m)',
-            'distancia_+24_km/h_(m)': 'Velocity Band Band 6 Distance (Session) (m)',
-            'distancia+28_(km/h)': 'Distancia +28km/h (m)',  # Sin umbrales en BD
-            'gen2_acceleration_band7plus_total_effort_count': 'Aceleraciones',  # Sin umbrales en BD
-            'average_player_load': 'Average Player Load'
+            'distancia_21_kmh': 'HSR Distance (m)',
+            'distancia_24_kmh': 'Velocity Band Band 6 Distance (Session) (m)',
+            'acc_dec_total': 'Aceleraciones',  # Sin umbrales en BD
+            'ritmo_medio': 'Ritmo Medio'  # Sin umbrales en BD
         }
         
         # Obtener el nombre correcto para la consulta
@@ -1158,6 +1229,417 @@ def get_lista_jugadores():
     except Exception as e:
         print(f"Error obteniendo lista de jugadores: {e}")
         return []
+
+# --------------------------------------
+# FUNCIONES PARA TABLA INTERMEDIA DE MICROCICLOS
+# --------------------------------------
+
+def get_microciclos_from_processed_table():
+    """
+    Obtiene la lista de microciclos desde la tabla preprocesada.
+    Mucho más rápido que get_microciclos() ya que no procesa actividades en tiempo real.
+    
+    Returns:
+        Lista de diccionarios con:
+        - id: microciclo_id
+        - label: etiqueta para mostrar
+        - start_date: fecha de inicio
+        - end_date: fecha de fin
+        - partido_nombre: nombre del partido
+        - is_current: True si es semana actual
+    """
+    try:
+        engine = get_db_connection()
+        if engine is None:
+            return []
+        
+        query = '''
+            SELECT 
+                microciclo_id,
+                microciclo_nombre,
+                MIN(fecha_inicio) as fecha_inicio,
+                MAX(fecha_fin) as fecha_fin,
+                partido_nombre,
+                MAX(fecha_partido) as fecha_partido,
+                MAX(is_current_week) as is_current_week
+            FROM microciclos_metricas_procesadas
+            GROUP BY microciclo_id, microciclo_nombre, partido_nombre
+            ORDER BY MIN(fecha_inicio) DESC
+        '''
+        
+        df = pd.read_sql(query, engine)
+        
+        if df.empty:
+            return []
+        
+        microciclos = []
+        for _, row in df.iterrows():
+            # Formatear fechas para label
+            fecha_inicio_str = pd.to_datetime(row['fecha_inicio']).strftime('%d/%m/%Y')
+            fecha_fin_str = pd.to_datetime(row['fecha_fin']).strftime('%d/%m/%Y')
+            
+            microciclo = {
+                'id': row['microciclo_id'],
+                'label': f"{row['microciclo_nombre']} ({fecha_inicio_str} - {fecha_fin_str})",
+                'start_date': pd.to_datetime(row['fecha_inicio']).strftime('%Y-%m-%d'),
+                'end_date': pd.to_datetime(row['fecha_fin']).strftime('%Y-%m-%d %H:%M:%S'),
+                'partido_nombre': row['partido_nombre'],
+                'is_current': bool(row.get('is_current_week', False))
+            }
+            
+            microciclos.append(microciclo)
+        
+        return microciclos
+        
+    except Exception as e:
+        print(f"Error obteniendo microciclos desde tabla procesada: {e}")
+        import traceback
+        traceback.print_exc()
+        # Fallback a función antigua
+        return get_microciclos()
+
+
+def get_microciclo_data_processed(microciclo_id, metric_name, athlete_ids=None, 
+                                   exclude_part_rehab=True, exclude_goalkeepers=True):
+    """
+    Obtiene datos de un microciclo desde la tabla preprocesada.
+    
+    Args:
+        microciclo_id (str): ID del microciclo (ej: 'mc_2024-11-10_vs_Oviedo')
+        metric_name (str): Nombre de la métrica (ej: 'total_distance')
+        athlete_ids (list): Lista de IDs de atletas a incluir (None = todos)
+        exclude_part_rehab (bool): Excluir participaciones Part/Rehab
+        exclude_goalkeepers (bool): Excluir porteros
+    
+    Returns:
+        DataFrame con columnas: activity_tag, athlete_id, athlete_name, athlete_position,
+                                participation_type, <metric_name>
+    """
+    try:
+        engine = get_db_connection()
+        if engine is None:
+            return pd.DataFrame()
+        
+        # Mapeo de nombres de métricas del dashboard a columnas de la tabla
+        metric_mapping = {
+            'total_distance': 'total_distance',
+            'distancia_+21_km/h_(m)': 'distancia_21_kmh',
+            'distancia_+24_km/h_(m)': 'distancia_24_kmh',
+            'distancia+28_(km/h)': 'distancia_28_kmh',
+            'gen2_acceleration_band7plus_total_effort_count': 'aceleraciones',
+            'average_player_load': 'player_load',
+            'player_load': 'player_load',
+            'max_vel': 'max_vel',
+            'field_time': 'field_time'
+        }
+        
+        # Obtener nombre de columna en la tabla
+        column_name = metric_mapping.get(metric_name, metric_name)
+        
+        # Construir query base (siempre incluir field_time para estandarización)
+        query = f'''
+            SELECT 
+                activity_tag,
+                activity_date,
+                activity_name,
+                athlete_id,
+                athlete_name,
+                athlete_position,
+                participation_type,
+                {column_name} as metric_value,
+                field_time
+            FROM microciclos_metricas_procesadas
+            WHERE microciclo_id = %s
+        '''
+        
+        params = [microciclo_id]
+        
+        # Filtros opcionales
+        if exclude_part_rehab:
+            query += " AND (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab'))"
+        
+        if exclude_goalkeepers:
+            query += " AND athlete_position != 'Goal Keeper'"
+        
+        if athlete_ids:
+            placeholders = ','.join(['%s'] * len(athlete_ids))
+            query += f" AND athlete_id IN ({placeholders})"
+            params.extend(athlete_ids)
+        
+        query += " ORDER BY activity_date ASC, athlete_name ASC"
+        
+        df = pd.read_sql(query, engine, params=tuple(params))
+        
+        return df
+        
+    except Exception as e:
+        print(f"Error obteniendo datos del microciclo procesado: {e}")
+        import traceback
+        traceback.print_exc()
+        return pd.DataFrame()
+
+
+def get_athletes_from_microciclo(microciclo_id):
+    """
+    Obtiene la lista de atletas que participaron en un microciclo.
+    
+    Args:
+        microciclo_id (str): ID del microciclo
+    
+    Returns:
+        DataFrame con: athlete_id, athlete_name, athlete_position, 
+                      has_part_rehab (True si tiene alguna actividad Part/Rehab)
+    """
+    try:
+        engine = get_db_connection()
+        if engine is None:
+            return pd.DataFrame()
+        
+        query = '''
+            SELECT DISTINCT
+                athlete_id,
+                athlete_name,
+                athlete_position,
+                MAX(CASE 
+                    WHEN participation_type IN ('Part', 'Rehab') THEN 1 
+                    ELSE 0 
+                END) as has_part_rehab
+            FROM microciclos_metricas_procesadas
+            WHERE microciclo_id = %s
+            GROUP BY athlete_id, athlete_name, athlete_position
+            ORDER BY athlete_name ASC
+        '''
+        
+        df = pd.read_sql(query, engine, params=(microciclo_id,))
+        df['has_part_rehab'] = df['has_part_rehab'].astype(bool)
+        
+        return df
+        
+    except Exception as e:
+        print(f"Error obteniendo atletas del microciclo: {e}")
+        return pd.DataFrame()
+
+
+def get_microciclo_metrics_summary(microciclo_id, metric_name, athlete_ids=None,
+                                   exclude_part_rehab=True, exclude_goalkeepers=True):
+    """
+    Obtiene resumen de métricas agrupadas por día (activity_tag) para un microciclo.
+    Útil para gráficos de barras por día.
+    
+    Args:
+        microciclo_id (str): ID del microciclo
+        metric_name (str): Nombre de la métrica
+        athlete_ids (list): Lista de IDs de atletas a incluir
+        exclude_part_rehab (bool): Excluir Part/Rehab
+        exclude_goalkeepers (bool): Excluir porteros
+    
+    Returns:
+        DataFrame con: activity_tag, avg_metric, sum_metric, count_athletes
+    """
+    print(f"\n📊 get_microciclo_metrics_summary LLAMADA:")
+    print(f"  Microciclo: {microciclo_id}")
+    print(f"  Métrica: {metric_name}")
+    print(f"  Jugadores: {len(athlete_ids) if athlete_ids else 'TODOS'}")
+    print(f"  Exclude Part/Rehab: {exclude_part_rehab}")
+    
+    try:
+        engine = get_db_connection()
+        if engine is None:
+            return pd.DataFrame()
+        
+        # Mapeo de métricas
+        metric_mapping = {
+            'total_distance': 'total_distance',
+            'distancia_+21_km/h_(m)': 'distancia_21_kmh',
+            'distancia_+24_km/h_(m)': 'distancia_24_kmh',
+            'distancia+28_(km/h)': 'distancia_28_kmh',
+            'gen2_acceleration_band7plus_total_effort_count': 'aceleraciones',
+            'average_player_load': 'player_load',
+            'player_load': 'player_load',
+            'max_vel': 'max_vel',
+            'field_time': 'field_time'
+        }
+        
+        column_name = metric_mapping.get(metric_name, metric_name)
+        
+        # Query con agregaciones
+        query = f'''
+            SELECT 
+                activity_tag,
+                activity_date,
+                AVG({column_name}) as avg_metric,
+                SUM({column_name}) as sum_metric,
+                COUNT(DISTINCT athlete_id) as count_athletes
+            FROM microciclos_metricas_procesadas
+            WHERE microciclo_id = %s
+        '''
+        
+        params = [microciclo_id]
+        
+        if exclude_part_rehab:
+            query += " AND (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab'))"
+        
+        if exclude_goalkeepers:
+            query += " AND athlete_position != 'Goal Keeper'"
+        
+        if athlete_ids:
+            placeholders = ','.join(['%s'] * len(athlete_ids))
+            # NO filtrar MD por jugadores (debe usar TODOS), solo filtrar entrenamientos
+            query += f" AND (activity_tag = 'MD' OR athlete_id IN ({placeholders}))"
+            params.extend(athlete_ids)
+            print(f"  🔍 Filtrando: {len(athlete_ids)} jugadores para entrenamientos, MD usa TODOS")
+        
+        query += " GROUP BY activity_tag, activity_date ORDER BY activity_date ASC"
+        
+        df = pd.read_sql(query, engine, params=tuple(params))
+        
+        if not df.empty:
+            print(f"  ✅ Resumen obtenido:")
+            for _, row in df.iterrows():
+                print(f"    {row['activity_tag']}: {row['count_athletes']} jugadores, avg={row['avg_metric']:.1f}")
+        
+        return df
+        
+    except Exception as e:
+        print(f"Error obteniendo resumen de métricas: {e}")
+        import traceback
+        traceback.print_exc()
+        return pd.DataFrame()
+
+
+def get_ultimos_4_mds_promedios(metric_name, fecha_partido_actual, exclude_part_rehab=True, exclude_goalkeepers=True):
+    """
+    Obtiene los promedios de los últimos 4 MDs (incluyendo el actual).
+    CRÍTICO: Filtra jugadores +70 mins y estandariza a 94'.
+    
+    Args:
+        metric_name: Nombre de la métrica
+        fecha_partido_actual: Fecha del partido actual para buscar hacia atrás
+        exclude_part_rehab: Excluir Part/Rehab
+        exclude_goalkeepers: Excluir porteros
+        
+    Returns:
+        DataFrame con: fecha_partido, microciclo_id, promedio_estandarizado
+    """
+    try:
+        engine = get_db_connection()
+        if engine is None:
+            return pd.DataFrame()
+        
+        # Mapeo de métricas
+        metric_mapping = {
+            'total_distance': 'total_distance',
+            'distancia_+21_km/h_(m)': 'distancia_21_kmh',
+            'distancia_+24_km/h_(m)': 'distancia_24_kmh',
+            'distancia+28_(km/h)': 'distancia_28_kmh',
+            'gen2_acceleration_band7plus_total_effort_count': 'aceleraciones',
+            'average_player_load': 'player_load',
+            'player_load': 'player_load',
+            'max_vel': 'max_vel'
+        }
+        
+        column_name = metric_mapping.get(metric_name, metric_name)
+        
+        # Query para obtener últimos 4 MDs con filtrado +70 mins y estandarización
+        query = f'''
+            SELECT 
+                activity_date as fecha_partido,
+                microciclo_id,
+                microciclo_nombre,
+                AVG({column_name} * (5640.0 / field_time)) as promedio_estandarizado
+            FROM microciclos_metricas_procesadas
+            WHERE activity_tag = 'MD'
+              AND field_time >= 4200
+              AND {column_name} IS NOT NULL
+              AND activity_date <= %s
+        '''
+        
+        params = [fecha_partido_actual]
+        
+        if exclude_part_rehab:
+            query += " AND (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab'))"
+        
+        if exclude_goalkeepers:
+            query += " AND athlete_position != 'Goal Keeper'"
+        
+        query += '''
+            GROUP BY activity_date, microciclo_id, microciclo_nombre
+            ORDER BY activity_date DESC
+            LIMIT 4
+        '''
+        
+        df = pd.read_sql(query, engine, params=tuple(params))
+        return df
+        
+    except Exception as e:
+        print(f"Error obteniendo últimos 4 MDs: {e}")
+        import traceback
+        traceback.print_exc()
+        return pd.DataFrame()
+
+
+def get_microciclo_athlete_totals(microciclo_id, metric_name, exclude_part_rehab=True, exclude_goalkeepers=True):
+    """
+    Obtiene totales acumulados por atleta para un microciclo.
+    Útil para comparar carga total entre jugadores.
+    
+    Args:
+        microciclo_id (str): ID del microciclo
+        metric_name (str): Nombre de la métrica
+        exclude_part_rehab (bool): Excluir Part/Rehab
+        exclude_goalkeepers (bool): Excluir porteros
+    
+    Returns:
+        DataFrame con: athlete_name, total_metric, avg_metric, num_sessions
+    """
+    try:
+        engine = get_db_connection()
+        if engine is None:
+            return pd.DataFrame()
+        
+        metric_mapping = {
+            'total_distance': 'total_distance',
+            'distancia_+21_km/h_(m)': 'distancia_21_kmh',
+            'distancia_+24_km/h_(m)': 'distancia_24_kmh',
+            'distancia+28_(km/h)': 'distancia_28_kmh',
+            'gen2_acceleration_band7plus_total_effort_count': 'aceleraciones',
+            'average_player_load': 'player_load',
+            'player_load': 'player_load',
+            'max_vel': 'max_vel',
+            'field_time': 'field_time'
+        }
+        
+        column_name = metric_mapping.get(metric_name, metric_name)
+        
+        query = f'''
+            SELECT 
+                athlete_id,
+                athlete_name,
+                athlete_position,
+                SUM({column_name}) as total_metric,
+                AVG({column_name}) as avg_metric,
+                COUNT(DISTINCT activity_id) as num_sessions
+            FROM microciclos_metricas_procesadas
+            WHERE microciclo_id = %s
+        '''
+        
+        params = [microciclo_id]
+        
+        if exclude_part_rehab:
+            query += " AND (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab'))"
+        
+        if exclude_goalkeepers:
+            query += " AND athlete_position != 'Goal Keeper'"
+        
+        query += " GROUP BY athlete_id, athlete_name, athlete_position ORDER BY total_metric DESC"
+        
+        df = pd.read_sql(query, engine, params=tuple(params))
+        
+        return df
+        
+    except Exception as e:
+        print(f"Error obteniendo totales por atleta: {e}")
+        return pd.DataFrame()
 
 
 def get_full_section_ranking(ranking_id: str):

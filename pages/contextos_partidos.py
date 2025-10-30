@@ -86,7 +86,7 @@ def get_escudo_path(team_name):
         
         'Real Valladolid Club de Fútbol': 'Real Valladolid CF.png',
         'Real Valladolid CF': 'Real Valladolid CF.png',
-        'Valladolid': 'Real Valladolid CF.png',
+        'Real Valladolid': 'Real Valladolid CF.png',
         
         'Fútbol Club Andorra': 'FC Andorra.png',
         'FC Andorra': 'FC Andorra.png',
