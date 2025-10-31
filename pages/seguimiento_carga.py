@@ -1039,28 +1039,28 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
     # Multiplicadores por métrica (relativos a la línea naranja = 100%)
     umbrales_multiplicadores = {
         'total_distance': {
-            'MD-4': {'min': 0.40, 'max': 0.6},  # 65-85% del máximo
-            'MD-3': {'min': 0.70, 'max': 0.90},  # 50-70% del máximo
-            'MD-2': {'min': 0.40, 'max': 0.55},  # 35-55% del máximo
-            'MD-1': {'min': 0.30, 'max': 0.45}   # 20-40% del máximo
+            'MD-4': {'min': 0.45, 'max': 0.6},  # 65-85% del máximo
+            'MD-3': {'min': 0.65, 'max': 0.80},  # 50-70% del máximo
+            'MD-2': {'min': 0.35, 'max': 0.5},  # 35-55% del máximo
+            'MD-1': {'min': 0.25, 'max': 0.4}   # 20-40% del máximo
         },
         'distancia_21_kmh': {
             'MD-4': {'min': 0.20, 'max': 0.30},
             'MD-3': {'min': 0.5, 'max': 0.8},
-            'MD-2': {'min': 0.30, 'max': 0.40},
-            'MD-1': {'min': 0.1, 'max': 0.3}
+            'MD-2': {'min': 0.15, 'max': 0.3},
+            'MD-1': {'min': 0.15, 'max': 0.3}
         },
         'distancia_24_kmh': {
             'MD-4': {'min': 0.10, 'max': 0.2},
             'MD-3': {'min': 0.40, 'max': 0.60},
-            'MD-2': {'min': 0.3, 'max': 0.4},
-            'MD-1': {'min': 0.20, 'max': 0.40}
+            'MD-2': {'min': 0.2, 'max': 0.3},
+            'MD-1': {'min': 0.10, 'max': 0.30}
         },
         'acc_dec_total': {
-            'MD-4': {'min': 0.9, 'max': 1.1},
+            'MD-4': {'min': 0.75, 'max': 1},
             'MD-3': {'min': 0.5, 'max': 0.7},
-            'MD-2': {'min': 0.60, 'max': 0.90},
-            'MD-1': {'min': 0.3, 'max': 0.6}
+            'MD-2': {'min': 0.35, 'max': 0.65},
+            'MD-1': {'min': 0.3, 'max': 0.55}
         },
         'ritmo_medio': {
             'MD-4': {'min': 0.50, 'max': 0.80},
@@ -1467,10 +1467,10 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
     
     # Configuración de métricas con umbrales
     metricas_config = [
-        {'id': 'total_distance', 'label': 'Distancia Total', 'min': 180, 'max': 250},
-        {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 110, 'max': 180},
-        {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 100, 'max': 160},
-        {'id': 'acc_dec_total', 'label': 'Aceleraciones/Deceleraciones +3', 'min': 230, 'max': 330},
+        {'id': 'total_distance', 'label': 'Distancia Total', 'min': 170, 'max': 230},
+        {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 100, 'max': 170},
+        {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 80, 'max': 140},
+        {'id': 'acc_dec_total', 'label': 'Aceleraciones/Deceleraciones +3', 'min': 190, 'max': 290},
         {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 100, 'max': 140}
     ]
     
