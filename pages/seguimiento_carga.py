@@ -90,24 +90,24 @@ def get_metricas_config_por_tipo(tipo_microciclo):
     if tipo_microciclo == 'extendido':
         return [
             {'id': 'total_distance', 'label': 'Distancia Total', 'min': 200, 'max': 280, 'tipo': 'suma'},
-            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 90, 'max': 160, 'tipo': 'suma'},
-            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 90, 'max': 160, 'tipo': 'suma'},
+            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 100, 'max': 190, 'tipo': 'suma'},
+            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 90, 'max': 170, 'tipo': 'suma'},
             {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'min': 250, 'max': 380, 'tipo': 'suma'},
-            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 40, 'max': 80, 'tipo': 'media'}
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 50, 'max': 80, 'tipo': 'media'}
         ]
     elif tipo_microciclo == 'reducido':
         return [
             {'id': 'total_distance', 'label': 'Distancia Total', 'min': 125, 'max': 170, 'tipo': 'suma'},
-            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 100, 'max': 190, 'tipo': 'suma'},
-            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 90, 'max': 170, 'tipo': 'suma'},
+            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 70, 'max': 130, 'tipo': 'suma'},
+            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 60, 'max': 100, 'tipo': 'suma'},
             {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'min': 115, 'max': 190, 'tipo': 'suma'},
-            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 40, 'max': 80, 'tipo': 'media'}
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 50, 'max': 80, 'tipo': 'media'}
         ]
     else:  # estandar
         return [
             {'id': 'total_distance', 'label': 'Distancia Total', 'min': 170, 'max': 230, 'tipo': 'suma'},
-            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 70, 'max': 130, 'tipo': 'suma'},
-            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 60, 'max': 100, 'tipo': 'suma'},
+            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 90, 'max': 160, 'tipo': 'suma'},
+            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 80, 'max': 140, 'tipo': 'suma'},
             {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'min': 190, 'max': 290, 'tipo': 'suma'},
             {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 50, 'max': 80, 'tipo': 'media'}
         ]
