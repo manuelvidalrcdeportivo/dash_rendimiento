@@ -51,7 +51,6 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
         FROM microciclos_metricas_procesadas
         WHERE microciclo_id = '{microciclo_id}'
           AND athlete_position != 'Goal Keeper'
-          AND (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab'))
     '''
     
     df_microciclo = pd.read_sql(query_microciclo, engine)
@@ -127,7 +126,12 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
                     WHEN field_time >= 4200 
                     THEN acc_dec_total * (5640.0 / field_time) 
                     ELSE NULL 
-                END) as avg_acc_dec
+                END) as avg_acc_dec,
+                AVG(CASE 
+                    WHEN field_time >= 4200 
+                    THEN ritmo_medio
+                    ELSE NULL 
+                END) as avg_ritmo_medio
             FROM microciclos_metricas_procesadas
             WHERE activity_tag = 'MD'
               {condicion_fecha}
@@ -153,7 +157,7 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
         # Calcular max/min por métrica y obtener el partido del máximo
         maximos_historicos = {}
         if not df_historicos.empty:
-            for col in ['avg_total_distance', 'avg_distancia_21', 'avg_distancia_24', 'avg_acc_dec']:
+            for col in ['avg_total_distance', 'avg_distancia_21', 'avg_distancia_24', 'avg_acc_dec', 'avg_ritmo_medio']:
                 col_data = df_historicos[[col, 'activity_date', 'activity_name', 'microciclo_id']].dropna(subset=[col])
                 if len(col_data) > 0:
                     # Mapear nombres de columna a nombres de métrica
@@ -161,7 +165,8 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
                         'avg_total_distance': 'total_distance',
                         'avg_distancia_21': 'distancia_21_kmh',
                         'avg_distancia_24': 'distancia_24_kmh',
-                        'avg_acc_dec': 'acc_dec_total'
+                        'avg_acc_dec': 'acc_dec_total',
+                        'avg_ritmo_medio': 'ritmo_medio'
                     }
                     metric_name = metric_map[col]
                     
@@ -315,3 +320,197 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
         'nombre_partido': nombre_partido,
         'df_raw': df_microciclo
     }
+
+
+def calcular_maximo_individual_jugador(athlete_id, metric_name, fecha_referencia=None):
+    """
+    Calcula el máximo individual de un jugador en los últimos 4 MDs con +70 minutos.
+    
+    Args:
+        athlete_id: ID del jugador
+        metric_name: Nombre de la métrica (ej: 'total_distance')
+        fecha_referencia: Fecha del partido actual (para buscar hacia atrás)
+    
+    Returns:
+        dict con:
+        - 'max': Valor máximo estandarizado a 94'
+        - 'partido_max': Nombre del partido donde alcanzó el máximo
+        - 'fecha_max': Fecha del partido máximo
+        - 'tiene_datos': True si tiene al menos 1 MD +70'
+        - 'ultimo_md_fecha': Fecha del último MD +70' (si no tiene 4)
+        - 'warning': Mensaje de alerta si no tiene datos suficientes
+    """
+    print(f"🔍 Calculando máximo individual para jugador {athlete_id} - {metric_name}")
+    
+    engine = get_db_connection()
+    if not engine:
+        return {
+            'max': None,
+            'partido_max': None,
+            'fecha_max': None,
+            'tiene_datos': False,
+            'ultimo_md_fecha': None,
+            'warning': 'ERROR: No se pudo conectar a la base de datos'
+        }
+    
+    # Mapeo de nombres de métricas a columnas de BD
+    columnas_metricas = {
+        'total_distance': 'total_distance',
+        'distancia_+21_km/h_(m)': 'distancia_21_kmh',
+        'distancia_+24_km/h_(m)': 'distancia_24_kmh',
+        'distancia+28_(km/h)': 'distancia_28_kmh',
+        'gen2_acceleration_band7plus_total_effort_count': 'acc_dec_total',
+        'average_player_load': 'ritmo_medio'
+    }
+    
+    col_name = columnas_metricas.get(metric_name, metric_name)
+    
+    # Query para obtener últimos 4 MDs con +70 minutos del jugador
+    # INCLUIR el MD actual (<=) igual que Microciclo Equipo
+    query = f'''
+        SELECT 
+            activity_date,
+            activity_name,
+            field_time,
+            {col_name} as metric_value
+        FROM microciclos_metricas_procesadas
+        WHERE athlete_id = '{athlete_id}'
+          AND activity_tag = 'MD'
+          AND field_time >= 4200
+          {f"AND activity_date <= '{fecha_referencia}'" if fecha_referencia else ""}
+        ORDER BY activity_date DESC
+        LIMIT 4
+    '''
+    
+    try:
+        df = pd.read_sql(query, engine)
+        
+        if df.empty:
+            # No tiene ningún MD con +70 minutos en últimos 4
+            print(f"  ⚠️ Jugador {athlete_id}: SIN partidos +70' en últimos 4 MDs")
+            
+            # FALLBACK 1: Buscar desde inicio de temporada (15/08/2024)
+            query_temporada = f'''
+                SELECT 
+                    activity_date,
+                    activity_name,
+                    field_time,
+                    {col_name} as metric_value
+                FROM microciclos_metricas_procesadas
+                WHERE athlete_id = '{athlete_id}'
+                  AND activity_tag = 'MD'
+                  AND field_time >= 4200
+                  AND activity_date >= '2024-08-15'
+                ORDER BY activity_date DESC
+                LIMIT 4
+            '''
+            
+            df_temporada = pd.read_sql(query_temporada, engine)
+            
+            if not df_temporada.empty:
+                # Tiene al menos 1 MD +70' en la temporada
+                print(f"  ✅ Encontrados {len(df_temporada)} partidos +70' desde inicio de temporada")
+                
+                # Estandarizar y obtener máximo
+                df_temporada['metric_value_std'] = df_temporada['metric_value'] * (5640 / df_temporada['field_time'])
+                idx_max = df_temporada['metric_value_std'].idxmax()
+                max_value = df_temporada.loc[idx_max, 'metric_value_std']
+                partido_max = df_temporada.loc[idx_max, 'activity_name']
+                fecha_max = df_temporada.loc[idx_max, 'activity_date']
+                
+                return {
+                    'max': max_value,
+                    'partido_max': partido_max,
+                    'fecha_max': fecha_max,
+                    'tiene_datos': True,
+                    'ultimo_md_fecha': df_temporada['activity_date'].iloc[0],
+                    'warning': f'⚠️ Solo {len(df_temporada)} partido(s) +70\' en temporada (desde 15/08)',
+                    'num_partidos': len(df_temporada)
+                }
+            
+            # FALLBACK 2: Buscar partido donde jugó más minutos (sin filtro +70')
+            query_max_minutos = f'''
+                SELECT 
+                    activity_date,
+                    activity_name,
+                    field_time,
+                    {col_name} as metric_value
+                FROM microciclos_metricas_procesadas
+                WHERE athlete_id = '{athlete_id}'
+                  AND activity_tag = 'MD'
+                  AND field_time > 0
+                  AND activity_date >= '2024-08-15'
+                ORDER BY field_time DESC
+                LIMIT 1
+            '''
+            
+            df_max_min = pd.read_sql(query_max_minutos, engine)
+            
+            if df_max_min.empty:
+                # No tiene ningún MD registrado
+                return {
+                    'max': None,
+                    'partido_max': None,
+                    'fecha_max': None,
+                    'tiene_datos': False,
+                    'ultimo_md_fecha': None,
+                    'warning': '🔴🔴 ALERTA: Ningún partido registrado en temporada',
+                    'num_partidos': 0
+                }
+            else:
+                # Usar el partido donde jugó más minutos y estandarizar
+                field_time = df_max_min['field_time'].iloc[0]
+                metric_value = df_max_min['metric_value'].iloc[0]
+                valor_std = metric_value * (5640 / field_time)
+                partido = df_max_min['activity_name'].iloc[0]
+                fecha = df_max_min['activity_date'].iloc[0]
+                
+                print(f"  ⚠️ Usando partido con más minutos: {field_time/60:.0f}' ({partido})")
+                
+                return {
+                    'max': valor_std,
+                    'partido_max': partido,
+                    'fecha_max': fecha,
+                    'tiene_datos': True,
+                    'ultimo_md_fecha': fecha,
+                    'warning': f'🔴 ALERTA: Sin partidos +70\'. Referencia: {field_time/60:.0f}\' en {partido}',
+                    'num_partidos': 1
+                }
+        
+        # Tiene al menos 1 MD con +70 minutos
+        print(f"  ✅ Jugador {athlete_id}: {len(df)} partidos +70' encontrados")
+        
+        # Estandarizar a 94 minutos (5640 segundos)
+        df['metric_value_std'] = df['metric_value'] * (5640 / df['field_time'])
+        
+        # Obtener el máximo
+        idx_max = df['metric_value_std'].idxmax()
+        max_value = df.loc[idx_max, 'metric_value_std']
+        partido_max = df.loc[idx_max, 'activity_name']
+        fecha_max = df.loc[idx_max, 'activity_date']
+        
+        # Verificar si tiene menos de 4 MDs
+        warning = None
+        if len(df) < 4:
+            warning = f'⚠️ Solo {len(df)} partido(s) +70\' en últimos 4 MDs'
+        
+        return {
+            'max': max_value,
+            'partido_max': partido_max,
+            'fecha_max': fecha_max,
+            'tiene_datos': True,
+            'ultimo_md_fecha': df['activity_date'].iloc[0],  # El más reciente
+            'warning': warning,
+            'num_partidos': len(df)
+        }
+        
+    except Exception as e:
+        print(f"  ❌ Error calculando máximo individual: {e}")
+        return {
+            'max': None,
+            'partido_max': None,
+            'fecha_max': None,
+            'tiene_datos': False,
+            'ultimo_md_fecha': None,
+            'warning': f'ERROR: {str(e)}'
+        }

@@ -28,7 +28,89 @@ from utils.db_manager import (
     get_ultimos_4_mds_promedios
 )
 from utils.layouts import standard_page
-from utils.carga_jugadores import calcular_estadisticas_md_jugadores
+
+# Registrar la página
+dash.register_page(__name__, path='/seguimiento-carga', name='Seguimiento de Carga')
+
+# ============================================
+# FUNCIÓN DE DETECCIÓN DE TIPO DE MICROCICLO
+# ============================================
+
+def detectar_tipo_microciclo(dias_presentes):
+    """
+    Detecta el tipo de microciclo según los días de entrenamiento presentes.
+    
+    Tipos:
+    - EXTENDIDO: Tiene MD-5 (5 entrenamientos: MD-5, MD-4, MD-3, MD-2, MD-1)
+    - REDUCIDO: NO tiene MD-5 ni MD-4 (3 entrenamientos: MD-3, MD-2, MD-1)
+    - ESTÁNDAR: Tiene MD-4 pero NO MD-5 (4 entrenamientos: MD-4, MD-3, MD-2, MD-1)
+    
+    Args:
+        dias_presentes: Lista de tags de días (ej: ['MD+1', 'MD-4', 'MD-3', 'MD-2', 'MD-1', 'MD'])
+    
+    Returns:
+        str: 'extendido', 'reducido', o 'estandar'
+    """
+    if not dias_presentes:
+        return 'estandar'
+    
+    # Extendido
+    if 'MD-5' in dias_presentes or 'MD-6' in dias_presentes:
+        return 'extendido'
+    # Reducido
+    elif 'MD-4' not in dias_presentes:
+        return 'reducido'
+    # Estándar
+    else:
+        return 'estandar'
+
+def get_metricas_disponibles():
+    """
+    Retorna la lista de métricas disponibles con sus propiedades.
+    ÚNICA FUENTE DE VERDAD para las métricas del sistema.
+    """
+    return [
+        {'id': 'total_distance', 'label': 'Distancia Total (m)', 'label_corto': 'Distancia Total', 'icon': 'fa-route'},
+        {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h (m)', 'label_corto': 'Dist. +21 km/h', 'icon': 'fa-running'},
+        {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h (m)', 'label_corto': 'Dist. +24 km/h', 'icon': 'fa-bolt'},
+        {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'label_corto': 'Acel/Decel +3', 'icon': 'fa-tachometer-alt'},
+        {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min)', 'label_corto': 'Ritmo Medio', 'icon': 'fa-stopwatch'}
+    ]
+
+def get_metricas_config_por_tipo(tipo_microciclo):
+    """
+    Retorna la configuración de métricas con umbrales según el tipo de microciclo.
+    
+    Args:
+        tipo_microciclo: 'estandar', 'extendido', o 'reducido'
+    
+    Returns:
+        Lista de diccionarios con configuración de métricas
+    """
+    if tipo_microciclo == 'extendido':
+        return [
+            {'id': 'total_distance', 'label': 'Distancia Total', 'min': 200, 'max': 280, 'tipo': 'suma'},
+            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 90, 'max': 160, 'tipo': 'suma'},
+            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 90, 'max': 160, 'tipo': 'suma'},
+            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'min': 250, 'max': 380, 'tipo': 'suma'},
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 40, 'max': 80, 'tipo': 'media'}
+        ]
+    elif tipo_microciclo == 'reducido':
+        return [
+            {'id': 'total_distance', 'label': 'Distancia Total', 'min': 125, 'max': 170, 'tipo': 'suma'},
+            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 100, 'max': 190, 'tipo': 'suma'},
+            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 90, 'max': 170, 'tipo': 'suma'},
+            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'min': 115, 'max': 190, 'tipo': 'suma'},
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 40, 'max': 80, 'tipo': 'media'}
+        ]
+    else:  # estandar
+        return [
+            {'id': 'total_distance', 'label': 'Distancia Total', 'min': 170, 'max': 230, 'tipo': 'suma'},
+            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 70, 'max': 130, 'tipo': 'suma'},
+            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 60, 'max': 100, 'tipo': 'suma'},
+            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'min': 190, 'max': 290, 'tipo': 'suma'},
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 50, 'max': 80, 'tipo': 'media'}
+        ]
 
 # Función para obtener el contenido de "Microciclo Equipo" (contenido actual)
 def get_microciclo_equipo_content(microciclos=None):
@@ -39,14 +121,8 @@ def get_microciclo_equipo_content(microciclos=None):
     microciclo_options = [{'label': mc['label'], 'value': mc['id']} for mc in microciclos]
     default_microciclo = microciclos[0]['id'] if microciclos else None
     
-    # Definir métricas disponibles (similar a Control Proceso Competición)
-    metricas_disponibles = [
-        {'id': 'total_distance', 'label': 'Distancia Total (m)', 'icon': 'fa-route'},
-        {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h (m)', 'icon': 'fa-running'},
-        {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h (m)', 'icon': 'fa-bolt'},
-        {'id': 'acc_dec_total', 'label': 'Aceleraciones/Deceleraciones +3', 'icon': 'fa-tachometer-alt'},
-        {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min)', 'icon': 'fa-stopwatch'}
-    ]
+    # USAR FUNCIÓN CENTRALIZADA PARA MÉTRICAS
+    metricas_disponibles = get_metricas_disponibles()
     
     return html.Div([
         # Stores globales
@@ -135,7 +211,7 @@ def get_microciclo_equipo_content(microciclos=None):
                     })
                 ]),
         
-        # PASO 3: Botones de métricas + Filtros
+        # PASO 3: Botones de métricas (sin filtros)
         html.Div(id="sc-metricas-container", style={'display': 'none'}, children=[
             dbc.Card([
                 dbc.CardBody([
@@ -195,71 +271,7 @@ def get_microciclo_equipo_content(microciclos=None):
                             )
                         ], width=12, md=6, lg=4, className="mb-2")
                         for idx, m in enumerate(metricas_disponibles[3:], start=3)  # Últimos 2 botones
-                    ], justify="center"),
-                    
-                    html.Hr(style={'margin': '20px 0', 'borderColor': '#e0e0e0'}),
-                    
-                    # Filtro de jugadores
-                    html.Label("Filtro de Jugadores (opcional):", style={
-                        'fontWeight': '600',
-                        'fontSize': '14px',
-                        'color': '#1e3d59',
-                        'marginBottom': '10px',
-                        'display': 'block'
-                    }),
-                    html.Div(id="sc-jugadores-container", children=[
-                        dbc.Row([
-                            dbc.Col([
-                                dcc.Dropdown(
-                                    id="sc-player-dropdown",
-                                    options=[],
-                                    value=[],
-                                    multi=True,
-                                    placeholder="Todos los jugadores seleccionados por defecto...",
-                                    className="mb-2"
-                                ),
-                                html.Div([
-                                    dbc.Checklist(
-                                        id="sc-incluir-porteros",
-                                        options=[{'label': ' Incluir porteros', 'value': 'incluir'}],
-                                        value=[],
-                                        inline=True,
-                                        style={
-                                            'fontSize': '12px',
-                                            'color': '#6c757d',
-                                            'marginTop': '5px',
-                                            'display': 'inline-block',
-                                            'marginRight': '20px'
-                                        }
-                                    ),
-                                    dbc.Checklist(
-                                        id="sc-incluir-part-rehab",
-                                        options=[{'label': ' Incluir Part/Rehab', 'value': 'incluir'}],
-                                        value=[],
-                                        inline=True,
-                                        style={
-                                            'fontSize': '12px',
-                                            'color': '#6c757d',
-                                            'marginTop': '5px',
-                                            'display': 'inline-block'
-                                        }
-                                    ),
-                                ]),
-                            ], width=12)
-                        ]),
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Button("Aplicar Filtro", id="sc-filtrar-btn", style={
-                                    'backgroundColor': '#28a745',
-                                    'border': 'none',
-                                    'borderRadius': '8px',
-                                    'padding': '8px 20px',
-                                    'fontWeight': '600',
-                                    'fontSize': '14px'
-                                }, size="sm"),
-                            ], width=12, className="text-end")
-                        ], className="mt-2")
-                    ])
+                    ], justify="center")
                 ])
             ], className="mb-4", style={
                 'backgroundColor': 'white',
@@ -352,9 +364,9 @@ def get_microciclo_equipo_content(microciclos=None):
         )  # Cierre del dcc.Loading general
 ])
 
-# Función para obtener el contenido de "Semana Jugadores"
-def get_semana_jugadores_content(microciclos=None):
-    """Contenido de la pestaña Semana Jugadores - Acumulado por jugador con colores por día"""
+# Función para obtener el contenido de "Microciclo Jugadores"
+def get_microciclo_jugadores_content(microciclos=None):
+    """Contenido de la pestaña Microciclo Jugadores - Análisis individual con máximos personalizados"""
     # Usar microciclos pasados como parámetro o lista vacía
     if microciclos is None:
         microciclos = []
@@ -365,7 +377,7 @@ def get_semana_jugadores_content(microciclos=None):
         # Card para filtros
         dbc.Card([
             dbc.CardBody([
-                # Fila principal: Microciclo, Métrica y Botón
+                # Fila principal: Microciclo y Botón (SIN selector de métrica)
                 dbc.Row([
                     dbc.Col([
                         html.Div([
@@ -384,26 +396,9 @@ def get_semana_jugadores_content(microciclos=None):
                                 placeholder="Selecciona un microciclo..."
                             ),
                         ])
-                    ], width=12, lg=4, className="mb-2"),
+                    ], width=12, lg=10, className="mb-2"),
                     dbc.Col([
-                        html.Div([
-                            html.Label("Métrica:", className="form-label", style={
-                                'fontWeight': '600',
-                                'fontSize': '13px',
-                                'color': '#1e3d59',
-                                'marginBottom': '6px',
-                                'display': 'block'
-                            }),
-                            dcc.Dropdown(
-                                id="sj-metric-dropdown",
-                                options=get_available_parameters(),
-                                value="total_distance",
-                                clearable=False
-                            ),
-                        ])
-                    ], width=12, lg=6, className="mb-2"),
-                    dbc.Col([
-                        dbc.Button("Cargar Datos", id="sj-cargar-btn", style={
+                        dbc.Button("Aplicar Filtro", id="sj-cargar-btn", style={
                             'backgroundColor': '#1e3d59',
                             'border': 'none',
                             'borderRadius': '8px',
@@ -414,139 +409,40 @@ def get_semana_jugadores_content(microciclos=None):
                     ], width=12, lg=2, className="mb-2")
                 ]),
                 
-                # Botón para mostrar selección personalizada
-                html.Hr(style={'margin': '15px 0', 'borderColor': '#e0e0e0'}),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Button(
-                            [html.I(className="fas fa-calendar-alt me-2"), "Selección de rango Personalizado"],
-                            id="sj-toggle-custom-date",
-                            color="link",
-                            style={
-                                'color': '#6c757d',
-                                'textDecoration': 'none',
-                                'fontSize': '13px',
-                                'padding': '5px 10px'
-                            },
-                            size="sm"
-                        )
-                    ], width=12)
-                ]),
-                
-                # Collapse para date pickers
-                dbc.Collapse([
-                    html.Hr(style={'margin': '10px 0', 'borderColor': '#e0e0e0'}),
+                # Selector de jugadores (aparece dinámicamente después de cargar)
+                html.Hr(style={'margin': '20px 0', 'borderColor': '#e0e0e0'}),
+                html.Div(id="sj-jugadores-container", style={'display': 'none'}, children=[
                     dbc.Row([
                         dbc.Col([
-                            html.Label("Fecha Inicio:", className="form-label", style={
-                                'fontWeight': '500',
-                                'fontSize': '12px',
-                                'color': '#6c757d',
-                                'marginBottom': '6px',
-                                'display': 'block'
-                            }),
-                            dcc.DatePickerSingle(
-                                id="sj-custom-start-date",
-                                display_format="YYYY-MM-DD",
-                                placeholder="Fecha inicio",
-                                first_day_of_week=1
-                            ),
-                        ], width=12, lg=4, className="mb-2"),
-                        dbc.Col([
-                            html.Label("Fecha Fin:", className="form-label", style={
-                                'fontWeight': '500',
-                                'fontSize': '12px',
-                                'color': '#6c757d',
-                                'marginBottom': '6px',
-                                'display': 'block'
-                            }),
-                            dcc.DatePickerSingle(
-                                id="sj-custom-end-date",
-                                display_format="YYYY-MM-DD",
-                                placeholder="Fecha fin",
-                                first_day_of_week=1
-                            ),
-                        ], width=12, lg=4, className="mb-2"),
-                        dbc.Col([
-                            dbc.Button("Aplicar Rango Personalizado", id="sj-apply-custom-date", style={
-                                'backgroundColor': '#28a745',
-                                'border': 'none',
-                                'borderRadius': '8px',
-                                'padding': '8px 16px',
+                            html.Label("Selecciona un jugador:", className="form-label", style={
                                 'fontWeight': '600',
                                 'fontSize': '13px',
-                                'marginTop': '24px'
-                            }, size="sm"),
-                        ], width=12, lg=4, className="mb-2")
-                    ])
-                ], id="sj-custom-date-collapse", is_open=False),
-                
-                # Store para las fechas actuales (del microciclo o personalizadas)
-                dcc.Store(id="sj-date-store", data={}),
-                
-                # Store para IDs de jugadores con Part/Rehab
-                dcc.Store(id="sj-part-rehab-store", data=[]),
-                
-                # Selector de jugadores (aparece dinámicamente)
-                html.Div(id="sj-jugadores-container", style={'display': 'none'}, children=[
-                    html.Hr(style={'margin': '20px 0', 'borderColor': '#e0e0e0'}),
-                    dbc.Row([
-                        dbc.Col([
-                            html.Label("Selecciona jugadores (opcional):", className="form-label", style={
-                                'fontWeight': '500',
-                                'fontSize': '13px',
-                                'color': '#6c757d',
+                                'color': '#1e3d59',
                                 'marginBottom': '8px'
                             }),
                             dcc.Dropdown(
-                                id="sj-jugadores-dropdown",
+                                id="sj-jugador-dropdown",
                                 options=[],
-                                value=[],
-                                multi=True,
-                                placeholder="Todos los jugadores seleccionados por defecto...",
+                                value=None,
+                                clearable=False,
+                                placeholder="Selecciona un jugador...",
                                 className="mb-2"
                             ),
-                            html.Div([
-                                dbc.Checklist(
-                                    id="sj-incluir-porteros",
-                                    options=[{'label': ' Incluir porteros', 'value': 'incluir'}],
-                                    value=[],
-                                    inline=True,
-                                    style={
-                                        'fontSize': '12px',
-                                        'color': '#6c757d',
-                                        'marginTop': '5px',
-                                        'display': 'inline-block',
-                                        'marginRight': '20px'
-                                    }
-                                ),
-                                dbc.Checklist(
-                                    id="sj-incluir-part-rehab",
-                                    options=[{'label': ' Incluir Part/Rehab', 'value': 'incluir'}],
-                                    value=[],
-                                    inline=True,
-                                    style={
-                                        'fontSize': '12px',
-                                        'color': '#6c757d',
-                                        'marginTop': '5px',
-                                        'display': 'inline-block'
-                                    }
-                                ),
-                            ]),
-                        ], width=12)
-                    ]),
-                    dbc.Row([
+                        ], width=12, lg=10),
                         dbc.Col([
-                            dbc.Button("Aplicar Filtro", id="sj-filtrar-btn", style={
-                                'backgroundColor': '#28a745',
-                                'border': 'none',
-                                'borderRadius': '8px',
-                                'padding': '8px 20px',
-                                'fontWeight': '600',
-                                'fontSize': '14px'
-                            }, size="sm"),
-                        ], width=12, className="text-end")
-                    ], className="mt-2")
+                            dbc.Checklist(
+                                id="sj-incluir-part-rehab",
+                                options=[{'label': ' Incluir Part/Rehab', 'value': 'incluir'}],
+                                value=[],
+                                inline=True,
+                                style={
+                                    'fontSize': '12px',
+                                    'color': '#6c757d',
+                                    'marginTop': '32px'
+                                }
+                            ),
+                        ], width=12, lg=2)
+                    ])
                 ])
             ])
         ], className="mb-4", style={
@@ -556,33 +452,33 @@ def get_semana_jugadores_content(microciclos=None):
             'border': 'none'
         }),
         
-        # Card para gráfico
-        dbc.Card([
-            dbc.CardBody([
-                dbc.Row([
-                    dbc.Col([
-                        html.H5("Acumulado semanal por jugador", style={
-                            'color': '#1e3d59',
-                            'fontWeight': '600',
-                            'fontSize': '18px',
-                            'marginBottom': '20px'
-                        }),
-                        dcc.Loading(
-                            id="sj-loading-chart",
-                            type="circle",
-                            children=[
-                                dcc.Graph(id="sj-stacked-chart")
-                            ]
-                        )
-                    ], width=12)
+        # Panel informativo de máximos del jugador (aparece después de seleccionar)
+        dcc.Loading(
+            id="loading-info-maximos",
+            type="circle",
+            children=html.Div(id="sj-info-maximos-container", style={'display': 'none'})
+        ),
+        
+        # Stores para datos (IGUAL QUE MICROCICLO EQUIPO)
+        dcc.Store(id="sj-microciclo-cache", data={}),
+        dcc.Store(id="sj-jugador-cache", data={}),
+        dcc.Store(id="sj-jugador-loaded", data=False),  # Trigger para cargar contenido
+        
+        # Loading general que envuelve todo el contenido (IGUAL QUE MICROCICLO EQUIPO)
+        dcc.Loading(
+            id="sj-loading-general",
+            type="circle",
+            color="#1e3d59",
+            children=[
+                html.Div(id="sj-contenido-jugador", children=[
+                    html.Div([
+                        html.P("Selecciona un microciclo y un jugador para ver el análisis", 
+                               className="text-center text-muted",
+                               style={'padding': '40px', 'fontSize': '14px'})
+                    ])
                 ])
-            ])
-        ], className="mb-4", style={
-            'backgroundColor': 'white',
-            'borderRadius': '12px',
-            'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
-            'border': 'none'
-        })
+            ]
+        )
     ])
 
 # Función para obtener el contenido de "Carga Jugadores"
@@ -762,7 +658,7 @@ layout = standard_page([
                     }
                 ),
                 html.Button(
-                    "Semana Jugadores",
+                    "Microciclo Jugadores",
                     id="tab-cpe-jugadores",
                     className="tab-button",
                     style={
@@ -846,22 +742,12 @@ def update_sc_microciclo_options(microciclos):
     prevent_initial_call=False
 )
 def update_sj_microciclo_options(microciclos):
-    """Actualiza las opciones del dropdown de microciclos para Semana Jugadores"""
+    """Actualiza las opciones del dropdown de microciclos para Microciclo Jugadores"""
     if not microciclos:
         return [], None
     options = [{'label': mc['label'], 'value': mc['id']} for mc in microciclos]
     default_value = microciclos[0]['id'] if microciclos else None
     return options, default_value
-
-# Callback para toggle collapse de fechas personalizadas - Semana Jugadores
-@callback(
-    Output("sj-custom-date-collapse", "is_open"),
-    Input("sj-toggle-custom-date", "n_clicks"),
-    State("sj-custom-date-collapse", "is_open"),
-    prevent_initial_call=True
-)
-def toggle_sj_custom_date(n_clicks, is_open):
-    return not is_open
 
 # Callback para actualizar store de fechas desde microciclo - Microciclo Equipo
 @callback(
@@ -872,37 +758,6 @@ def toggle_sj_custom_date(n_clicks, is_open):
 )
 def update_sc_date_store(microciclo_id, microciclos):
     """Actualiza el store de fechas desde microciclo seleccionado"""
-    if microciclo_id and microciclos:
-        microciclo = next((mc for mc in microciclos if mc['id'] == microciclo_id), None)
-        if microciclo:
-            return {
-                'start_date': microciclo['start_date'],
-                'end_date': microciclo['end_date'],
-                'source': 'microciclo'
-            }
-    
-    return {}
-
-# Callback para actualizar store de fechas desde microciclo - Semana Jugadores
-@callback(
-    Output("sj-date-store", "data"),
-    Input("sj-microciclo-dropdown", "value"),
-    Input("sj-apply-custom-date", "n_clicks"),
-    State("sj-custom-start-date", "date"),
-    State("sj-custom-end-date", "date"),
-    State("microciclos-store", "data"),
-    prevent_initial_call=False
-)
-def update_sj_date_store(microciclo_id, apply_clicks, custom_start, custom_end, microciclos):
-    """Actualiza el store de fechas desde microciclo o fechas personalizadas"""
-    ctx = dash.callback_context
-    
-    # Si se aplicó rango personalizado
-    if ctx.triggered and ctx.triggered[0]['prop_id'] == 'sj-apply-custom-date.n_clicks':
-        if custom_start and custom_end:
-            return {'start_date': custom_start, 'end_date': custom_end, 'source': 'custom'}
-    
-    # Si se seleccionó un microciclo
     if microciclo_id and microciclos:
         microciclo = next((mc for mc in microciclos if mc['id'] == microciclo_id), None)
         if microciclo:
@@ -986,6 +841,12 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
             except:
                 pass
         
+        # Obtener minutos jugados si está disponible (para jugador individual)
+        minutos_str = ""
+        if 'field_time' in row and pd.notna(row['field_time']) and dia == 'MD':
+            minutos = int(row['field_time'] / 60)  # Convertir segundos a minutos
+            minutos_str = f"<br>Minutos jugados: <b>{minutos}'</b>"
+        
         # Determinar visibilidad por defecto (solo días MD-X y MD)
         es_dia_md = bool(re.match(r'^MD[-+]?\d*$', dia))
         visible_por_defecto = True if es_dia_md else 'legendonly'
@@ -1006,12 +867,14 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
             else:
                 porcentaje_md = f"<br>% sobre máx histórico: <b>{pct:.1f}%</b>"
         
-        # Tooltip
+        # Tooltip - Diferenciar entre equipo (Media) y jugador individual (Total)
+        tipo_valor = "Total" if num_jugadores == 1 else "Media"
         hovertemplate = f"<b>{dia}</b>" + \
                       fecha_str + \
-                      f"<br>{metrica_label} (Media): <b>{valor:.1f}{unidad}</b>" + \
+                      minutos_str + \
+                      f"<br>{metrica_label} ({tipo_valor}): <b>{valor:.1f}{unidad}</b>" + \
                       porcentaje_md + \
-                      f"<br>Jugadores: {num_jugadores}<br>" + \
+                      (f"<br>Jugadores: {num_jugadores}<br>" if num_jugadores > 1 else "<br>") + \
                       "<extra></extra>"
         
         # Añadir barra con texto del % sobre máximo histórico
@@ -1037,12 +900,14 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
     
     # AÑADIR UMBRALES POR DÍA - RELATIVOS AL MÁXIMO HISTÓRICO (línea naranja)
     # Multiplicadores por métrica (relativos a la línea naranja = 100%)
-    umbrales_multiplicadores = {
+    # UMBRALES SEGÚN TIPO DE MICROCICLO
+    
+    umbrales_estandar = {
         'total_distance': {
-            'MD-4': {'min': 0.45, 'max': 0.6},  # 65-85% del máximo
-            'MD-3': {'min': 0.65, 'max': 0.80},  # 50-70% del máximo
-            'MD-2': {'min': 0.35, 'max': 0.5},  # 35-55% del máximo
-            'MD-1': {'min': 0.25, 'max': 0.4}   # 20-40% del máximo
+            'MD-4': {'min': 0.45, 'max': 0.6},
+            'MD-3': {'min': 0.65, 'max': 0.80},
+            'MD-2': {'min': 0.35, 'max': 0.5},
+            'MD-1': {'min': 0.25, 'max': 0.4}
         },
         'distancia_21_kmh': {
             'MD-4': {'min': 0.20, 'max': 0.30},
@@ -1051,10 +916,10 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
             'MD-1': {'min': 0.15, 'max': 0.3}
         },
         'distancia_24_kmh': {
-            'MD-4': {'min': 0.10, 'max': 0.2},
+            'MD-4': {'min': 0.20, 'max': 0.4},
             'MD-3': {'min': 0.40, 'max': 0.60},
-            'MD-2': {'min': 0.2, 'max': 0.3},
-            'MD-1': {'min': 0.10, 'max': 0.30}
+            'MD-2': {'min': 0.10, 'max': 0.2},
+            'MD-1': {'min': 0.10, 'max': 0.2}
         },
         'acc_dec_total': {
             'MD-4': {'min': 0.75, 'max': 1},
@@ -1064,11 +929,94 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
         },
         'ritmo_medio': {
             'MD-4': {'min': 0.50, 'max': 0.80},
-            'MD-3': {'min': 0.5, 'max': 0.8},
-            'MD-2': {'min': 0.5, 'max': 0.70},
-            'MD-1': {'min': 0.4, 'max': 0.6}
+            'MD-3': {'min': 0.50, 'max': 0.80},
+            'MD-2': {'min': 0.30, 'max': 0.60},
+            'MD-1': {'min': 0.20, 'max': 0.50}
         }
     }
+    
+    umbrales_extendido = {
+        'total_distance': {
+            'MD-5': {'min': 0.30, 'max': 0.50},
+            'MD-4': {'min': 0.45, 'max': 0.60},
+            'MD-3': {'min': 0.65, 'max': 0.80},
+            'MD-2': {'min': 0.35, 'max': 0.50},
+            'MD-1': {'min': 0.25, 'max': 0.40}
+        },
+        'distancia_21_kmh': {
+            'MD-5': {'min': 0.10, 'max': 0.30},
+            'MD-4': {'min': 0.20, 'max': 0.30},
+            'MD-3': {'min': 0.50, 'max': 0.80},
+            'MD-2': {'min': 0.10, 'max': 0.25},
+            'MD-1': {'min': 0.10, 'max': 0.25}
+        },
+        'distancia_24_kmh': {
+            'MD-5': {'min': 0.10, 'max': 0.20},
+            'MD-4': {'min': 0.10, 'max': 0.20},
+            'MD-3': {'min': 0.40, 'max': 0.60},
+            'MD-2': {'min': 0.10, 'max': 0.20},
+            'MD-1': {'min': 0.10, 'max': 0.20}
+        },
+        'acc_dec_total': {
+            'MD-5': {'min': 0.65, 'max': 0.90},
+            'MD-4': {'min': 0.75, 'max': 1.00},
+            'MD-3': {'min': 0.50, 'max': 0.70},
+            'MD-2': {'min': 0.30, 'max': 0.65},
+            'MD-1': {'min': 0.30, 'max': 0.55}
+        },
+        'ritmo_medio': {
+            'MD-5': {'min': 0.50, 'max': 0.80},
+            'MD-4': {'min': 0.50, 'max': 0.80},
+            'MD-3': {'min': 0.50, 'max': 0.80},
+            'MD-2': {'min': 0.30, 'max': 0.60},
+            'MD-1': {'min': 0.20, 'max': 0.50}
+        }
+    }
+    
+    umbrales_reducido = {
+        'total_distance': {
+            'MD-3': {'min': 0.90, 'max': 1.10},
+            'MD-2': {'min': 0.80, 'max': 1.00},
+            'MD-1': {'min': 0.50, 'max': 0.90}
+        },
+        'distancia_21_kmh': {
+            'MD-3': {'min': 0.50, 'max': 0.80},
+            'MD-2': {'min': 0.10, 'max': 0.25},
+            'MD-1': {'min': 0.1, 'max': 0.25}
+        },
+        'distancia_24_kmh': {
+            'MD-3': {'min': 0.40, 'max': 0.60},
+            'MD-2': {'min': 0.10, 'max': 0.20},
+            'MD-1': {'min': 0.10, 'max': 0.20}
+        },
+        'acc_dec_total': {
+            'MD-3': {'min': 0.50, 'max': 0.70},
+            'MD-2': {'min': 0.35, 'max': 0.65},
+            'MD-1': {'min': 0.30, 'max': 0.55}
+        },
+        'ritmo_medio': {
+            'MD-3': {'min': 0.50, 'max': 0.80},
+            'MD-2': {'min': 0.30, 'max': 0.60},
+            'MD-1': {'min': 0.20, 'max': 0.50}
+        }
+    }
+    
+    # Detectar tipo de microciclo (solo si no viene en maximos_historicos)
+    if maximos_historicos and 'tipo_microciclo' in maximos_historicos:
+        tipo_microciclo = maximos_historicos['tipo_microciclo']
+        print(f"🔍 Tipo de microciclo (desde cache): {tipo_microciclo.upper()}")
+    else:
+        tipo_microciclo = detectar_tipo_microciclo(dias_ordenados)
+        print(f"🔍 Tipo de microciclo detectado: {tipo_microciclo.upper()}")
+        print(f"   Días presentes: {dias_ordenados}")
+    
+    # Seleccionar umbrales según tipo
+    if tipo_microciclo == 'extendido':
+        umbrales_multiplicadores = umbrales_extendido
+    elif tipo_microciclo == 'reducido':
+        umbrales_multiplicadores = umbrales_reducido
+    else:
+        umbrales_multiplicadores = umbrales_estandar
     
     # Solo aplicar umbrales si tenemos máximo histórico (línea naranja)
     if max_historico_md and max_historico_md > 0 and metric in umbrales_multiplicadores:
@@ -1091,12 +1039,12 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
                     layer="below"
                 )
                 
-                # Línea máximo (verde)
+                # Línea máximo (roja)
                 fig.add_shape(
                     type="line",
                     x0=idx-0.4, x1=idx+0.4,
                     y0=max_val, y1=max_val,
-                    line=dict(color="rgba(0, 128, 0, 0.9)", width=3),
+                    line=dict(color="rgba(255, 0, 0, 0.9)", width=3),
                 )
                 
                 # Línea mínimo (roja)
@@ -1114,7 +1062,7 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
             fig.add_trace(go.Scatter(
                 x=[None], y=[None],
                 mode='markers',
-                marker=dict(size=10, color='rgba(0, 128, 0, 0.9)'),
+                marker=dict(size=10, color='rgba(255, 0, 0, 0.9)'),
                 name='Máximo recomendado',
                 showlegend=True
             ))
@@ -1210,10 +1158,6 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
     Output("sc-microciclo-cache", "data"),
     Output("sc-microciclo-loaded", "data"),
     Output("sc-metricas-container", "style"),
-    Output("sc-jugadores-container", "style"),
-    Output("sc-player-dropdown", "options"),
-    Output("sc-player-dropdown", "value"),
-    Output("sc-part-rehab-store", "data"),
     Input("sc-cargar-microciclo-btn", "n_clicks"),
     State("sc-microciclo-dropdown", "value"),
     State("sc-date-store", "data"),
@@ -1223,9 +1167,10 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
     """
     OPTIMIZADO: Carga datos desde tabla intermedia.
     Fallback a método antiguo si la tabla no está disponible.
+    Sin filtros de jugadores - usa lógica fija (sin porteros, sin Part/Rehab)
     """
     if not microciclo_id:
-        return {}, False, {'display': 'none'}, {'display': 'none'}, [], [], []
+        return {}, False, {'display': 'none'}
     
     print(f"🔄 Cargando microciclo: {microciclo_id}")
     
@@ -1238,19 +1183,10 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
             print(f"⚠️ No hay datos en tabla intermedia para {microciclo_id}, usando método antiguo")
             raise Exception("Tabla intermedia vacía")
         
-        # Identificar jugadores con Part/Rehab
-        jugadores_con_part_rehab = atletas_df[atletas_df['has_part_rehab']]['athlete_id'].tolist()
-        
-        # Filtrar porteros
+        # Filtrar porteros - lógica fija (sin filtros de usuario)
         atletas_sin_porteros = atletas_df[atletas_df['athlete_position'] != 'Goal Keeper']
         
-        # Crear opciones dropdown
-        jugadores_options = [
-            {'label': row['athlete_name'], 'value': row['athlete_id']} 
-            for _, row in atletas_df.iterrows()
-        ]
-        
-        # Selección inicial: jugadores de campo
+        # Selección fija: jugadores de campo (sin porteros, sin Part/Rehab)
         jugadores_ids = atletas_sin_porteros['athlete_id'].tolist()
         
         print(f"⚡⚡⚡ ULTRA-OPTIMIZACIÓN: Cargando con solo 2 queries masivas...")
@@ -1272,6 +1208,25 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
         # Generar gráficos de forma ultra-optimizada
         print("🎨 Generando 6 gráficos (umbrales hardcodeados, 0 queries)...")
         
+        # Detectar tipo de microciclo ANTES de generar gráficos (1 sola vez)
+        dias_presentes = []
+        for metrica, df_resumen in datos_por_metrica.items():
+            if not df_resumen.empty:
+                dias_presentes = df_resumen['activity_tag'].unique().tolist()
+                break
+        
+        tipo_microciclo = detectar_tipo_microciclo(dias_presentes)
+        print(f"🔍 Tipo de microciclo: {tipo_microciclo.upper()}")
+        print(f"   Días presentes: {dias_presentes}")
+        
+        # Añadir tipo al diccionario de máximos históricos para pasarlo a los gráficos
+        ultimos_4_mds_con_tipo = {}
+        for metrica, datos in ultimos_4_mds_por_metrica.items():
+            if datos:
+                ultimos_4_mds_con_tipo[metrica] = {**datos, 'tipo_microciclo': tipo_microciclo}
+            else:
+                ultimos_4_mds_con_tipo[metrica] = {'tipo_microciclo': tipo_microciclo}
+        
         # Obtener parámetros una sola vez (no 6 veces)
         parametros = get_available_parameters()
         parametros_dict = {p['value']: p['label'] for p in parametros}
@@ -1279,12 +1234,12 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
         graficos_metricas = {}
         for metrica, df_resumen in datos_por_metrica.items():
             try:
-                # Generar gráfico con función optimizada (umbrales hardcodeados)
+                # Generar gráfico con función optimizada (tipo ya incluido en máximos)
                 fig = generar_grafico_optimizado_precargado(
                     df_resumen,
                     metrica,
                     parametros_dict.get(metrica, metrica),
-                    ultimos_4_mds_por_metrica.get(metrica),
+                    ultimos_4_mds_con_tipo.get(metrica),
                     None,  # umbrales_df no necesario (hardcodeados)
                     nombre_partido
                 )
@@ -1300,7 +1255,9 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
             'jugadores_ids': jugadores_ids,
             'cargado': True,
             'graficos': graficos_metricas,  # ← TODAS las figuras listas
-            'maximos_historicos': ultimos_4_mds_por_metrica  # ← Máximos precalculados
+            'maximos_historicos': ultimos_4_mds_por_metrica,  # ← Máximos precalculados
+            'tipo_microciclo': tipo_microciclo,  # ← Tipo detectado
+            'dias_presentes': dias_presentes  # ← Días disponibles
         }
         
         print(f"✅ Microciclo cargado: {len(atletas_df)} atletas, {len(graficos_metricas)} métricas")
@@ -1312,18 +1269,14 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
         return (
             cache_optimizado,
             timestamp,  # Trigger para cargar barras
-            {'display': 'block'},
-            {'display': 'block'},
-            jugadores_options,
-            jugadores_ids,
-            jugadores_con_part_rehab
+            {'display': 'block'}
         )
         
     except Exception as e:
         print(f"❌ Error cargando microciclo desde tabla intermedia: {e}")
         import traceback
         traceback.print_exc()
-        return {}, False, {'display': 'none'}, {'display': 'none'}, [], [], []
+        return {}, False, {'display': 'none'}
 
 # Callback para cargar y mostrar métrica inicial
 @callback(
@@ -1359,15 +1312,14 @@ def cargar_metrica_inicial(loaded_timestamp, cache_data):
     Output("sc-selected-metric", "data", allow_duplicate=True),
     Input({'type': 'metric-btn', 'index': ALL}, 'n_clicks'),
     State("sc-microciclo-cache", "data"),
-    State("sc-player-dropdown", "value"),
-    State("sc-incluir-part-rehab", "value"),
     prevent_initial_call=True
 )
-def cambiar_metrica(n_clicks_list, cache_data, jugadores_seleccionados, incluir_part_rehab):
+def cambiar_metrica(n_clicks_list, cache_data):
     """Cambia la métrica mostrada leyendo desde el cache
     
     Los datos YA están cargados en cache_data['graficos']
     NO hace queries adicionales = INSTANTÁNEO
+    Sin filtros de usuario - usa datos pre-cargados
     """
     ctx = dash.callback_context
     
@@ -1465,14 +1417,12 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
     
     print(f"🎯 Generando barras desde cache (SIN queries adicionales)")
     
-    # Configuración de métricas con umbrales
-    metricas_config = [
-        {'id': 'total_distance', 'label': 'Distancia Total', 'min': 170, 'max': 230},
-        {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 100, 'max': 170},
-        {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 80, 'max': 140},
-        {'id': 'acc_dec_total', 'label': 'Aceleraciones/Deceleraciones +3', 'min': 190, 'max': 290},
-        {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 100, 'max': 140}
-    ]
+    # Obtener tipo de microciclo del cache
+    tipo_microciclo = cache_data.get('tipo_microciclo', 'estandar')
+    print(f"📊 Usando configuración para microciclo {tipo_microciclo.upper()}")
+    
+    # Configuración de métricas con umbrales según tipo de microciclo
+    metricas_config = get_metricas_config_por_tipo(tipo_microciclo)
     
     # Colores para días
     colores_dias = {
@@ -1509,7 +1459,11 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
             # Obtener máximo histórico del cache
             max_historico = maximos_historicos.get(metric_id, {}).get('max')
             
+            # Determinar si es métrica de suma o media
+            es_media = config.get('tipo') == 'media'
+            
             # Extraer valores de las barras del gráfico
+            valores_entrenamientos = []
             for trace in fig.get('data', []):
                 dia = trace.get('name', '').split(' ')[0]  # Quitar porcentaje si existe
                 if dia and dia.startswith('MD-'):
@@ -1517,7 +1471,7 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
                     # Solo procesar si tenemos valor y máximo histórico válidos
                     if valor and valor > 0 and max_historico and max_historico > 0:
                         porcentaje = (valor / max_historico) * 100
-                        acumulado_total += porcentaje
+                        valores_entrenamientos.append(porcentaje)
                         entrenamientos_con_porcentaje.append({
                             'nombre': dia,
                             'porcentaje': porcentaje,
@@ -1526,6 +1480,12 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
             
             # Ordenar días correctamente (MD-4, MD-3, MD-2, MD-1)
             entrenamientos_con_porcentaje.sort(key=lambda x: x['nombre'], reverse=True)
+            
+            # Calcular acumulado según tipo de métrica
+            if es_media and valores_entrenamientos:
+                acumulado_total = sum(valores_entrenamientos) / len(valores_entrenamientos)
+            else:
+                acumulado_total = sum(valores_entrenamientos)
             
             # 4. Determinar color del acumulado
             if acumulado_total < config['min']:
@@ -1538,6 +1498,44 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
             # 5. Crear barra HTML para esta métrica
             # Calcular posición del mínimo
             pos_min = (config['min'] / config['max']) * 100 if config['max'] > 0 else 0
+            
+            # Para métricas de MEDIA: mostrar barra única sin segmentos
+            if es_media:
+                barra_contenido = html.Div(
+                    f"{acumulado_total:.0f}%",
+                    style={
+                        'width': f"{min(100, (acumulado_total / config['max']) * 100)}%",
+                        'backgroundColor': '#1e3d59',  # Azul marino siempre
+                        'color': 'white',
+                        'fontSize': '13px',
+                        'fontWeight': '600',
+                        'textAlign': 'center',
+                        'lineHeight': '40px',
+                        'textShadow': '0 0 3px rgba(0,0,0,0.5)',
+                        'height': '100%',
+                        'borderRadius': '6px 0 0 6px'
+                    }
+                )
+            else:
+                # Para métricas de SUMA: mostrar segmentos por día
+                barra_contenido = [
+                    html.Div(
+                        f"{e['porcentaje']:.0f}%",
+                        style={
+                            'width': f"{min(100, (e['porcentaje'] / config['max']) * 100)}%",
+                            'backgroundColor': e['color'],
+                            'color': 'white',
+                            'fontSize': '11px',
+                            'fontWeight': '600',
+                            'textAlign': 'center',
+                            'lineHeight': '40px',
+                            'textShadow': '0 0 3px rgba(0,0,0,0.5)',
+                            'display': 'inline-block',
+                            'height': '100%'
+                        }
+                    )
+                    for e in entrenamientos_con_porcentaje
+                ]
             
             barra_metrica = html.Div([
                 dbc.Row([
@@ -1554,45 +1552,28 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
                     # Columna central: Barra de progreso
                     dbc.Col([
                         html.Div([
-                            # Barra con segmentos de días
+                            # Barra (única para media, segmentada para suma)
                             html.Div(
-                                [
-                                    html.Div(
-                                        f"{e['porcentaje']:.0f}%",
-                                        style={
-                                            'width': f"{min(100, (e['porcentaje'] / config['max']) * 100)}%",
-                                            'backgroundColor': e['color'],
-                                            'color': 'white',
-                                            'fontSize': '11px',
-                                            'fontWeight': '600',
-                                            'textAlign': 'center',
-                                            'lineHeight': '40px',
-                                            'textShadow': '0 0 3px rgba(0,0,0,0.5)',
-                                            'display': 'inline-block',
-                                            'height': '100%'
-                                        }
-                                    )
-                                    for e in entrenamientos_con_porcentaje
-                                ],
+                                barra_contenido,
                                 style={
                                     'height': '40px',
                                     'backgroundColor': '#e9ecef',
                                     'borderRadius': '6px',
-                                    'display': 'flex',
+                                    'display': 'flex' if not es_media else 'block',
                                     'position': 'relative'
                                 }
                             ),
-                            # Línea del mínimo
+                            # Línea del mínimo (roja)
                             html.Div(style={
                                 'position': 'absolute',
                                 'left': f'{pos_min}%',
                                 'top': '0',
                                 'width': '2px',
                                 'height': '40px',
-                                'backgroundColor': '#1e3d59',
+                                'backgroundColor': '#dc3545',
                                 'zIndex': '5'
                             }),
-                            # Línea del máximo
+                            # Línea del máximo (roja)
                             html.Div(style={
                                 'position': 'absolute',
                                 'right': '0',
@@ -1610,7 +1591,7 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
                                 'transform': 'translateX(-50%)',
                                 'fontSize': '9px',
                                 'fontWeight': '600',
-                                'color': '#1e3d59',
+                                'color': '#dc3545',
                                 'whiteSpace': 'nowrap'
                             }),
                             # Label del máximo debajo
@@ -1657,145 +1638,8 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
         return html.Div("No hay datos suficientes para mostrar el seguimiento de carga", 
                        className="text-muted text-center p-3")
 
-# Callback para añadir/quitar porteros y actualizar indicadores (Microciclo Equipo)
-@callback(
-    Output("sc-player-dropdown", "options", allow_duplicate=True),
-    Output("sc-player-dropdown", "value", allow_duplicate=True),
-    Input("sc-incluir-porteros", "value"),
-    Input("sc-incluir-part-rehab", "value"),
-    State("sc-player-dropdown", "options"),
-    State("sc-player-dropdown", "value"),
-    State("sc-part-rehab-store", "data"),
-    prevent_initial_call=True
-)
-def toggle_filtros_equipo(incluir_porteros, incluir_part_rehab, current_options, current_value, part_rehab_ids):
-    """Añade/quita porteros y actualiza indicadores visuales para Part/Rehab - NO ACTUALIZA GRÁFICO"""
-    print(f"\n🔘 TOGGLE CHECKBOXES (NO recalcula gráfico, solo dropdown)")
-    print(f"  Porteros: {incluir_porteros}")
-    print(f"  Part/Rehab: {incluir_part_rehab}")
-    
-    if not current_options:
-        return current_options, current_value or []
-    
-    # Obtener todos los atletas disponibles
-    atletas_df = get_cached_athletes()
-    ids_disponibles = [opt['value'] for opt in current_options]
-    atletas_disponibles = atletas_df[atletas_df['id'].isin(ids_disponibles)].copy()
-    
-    # IDs con Part/Rehab
-    rehab_ids = set(part_rehab_ids) if part_rehab_ids else set()
-    
-    # Crear opciones con indicadores si Part/Rehab está marcado
-    nuevas_options = []
-    for _, row in atletas_disponibles.iterrows():
-        label = row['full_name']
-        
-        # Solo mostrar indicador si checkbox Part/Rehab está marcado Y el jugador tiene Part/Rehab
-        if 'incluir' in incluir_part_rehab and row['id'] in rehab_ids:
-            label = f"⚠️ {label} (incluyendo entrenamientos rehab)"
-        
-        nuevas_options.append({'label': label, 'value': row['id']})
-    
-    # Empezar con la selección actual
-    seleccion_actual = set(current_value) if current_value else set()
-    
-    # Obtener IDs de porteros
-    porteros_ids = set(atletas_disponibles[atletas_disponibles['position_name'] == 'Goal Keeper']['id'].tolist())
-    
-    # Aplicar lógica de añadir/quitar SOLO PORTEROS
-    if 'incluir' in incluir_porteros:
-        # AÑADIR porteros a la selección actual
-        seleccion_actual = seleccion_actual.union(porteros_ids)
-    else:
-        # QUITAR porteros de la selección actual
-        seleccion_actual = seleccion_actual - porteros_ids
-    
-    # Part/Rehab NO modifica la selección, solo los indicadores y el filtrado en "Aplicar Filtro"
-    
-    return nuevas_options, list(seleccion_actual)
-
-# Callback para aplicar filtro de jugadores en Microciclo Equipo
-@callback(
-    Output("sc-bar-chart", "figure", allow_duplicate=True),
-    Output("sc-selected-metric", "data", allow_duplicate=True),
-    Output("sc-microciclo-cache", "data", allow_duplicate=True),
-    Input("sc-filtrar-btn", "n_clicks"),
-    State("sc-selected-metric", "data"),
-    State("sc-microciclo-cache", "data"),
-    State("sc-player-dropdown", "value"),
-    State("sc-incluir-part-rehab", "value"),
-    prevent_initial_call=True
-)
-def aplicar_filtro_microciclo(n_clicks, metrica_actual, cache_data, jugadores_seleccionados, incluir_part_rehab):
-    """Aplica filtro de jugadores seleccionados y regenera gráfico"""
-    if not cache_data or not cache_data.get('cargado'):
-        raise PreventUpdate
-    
-    if not jugadores_seleccionados:
-        raise PreventUpdate
-    
-    # Determinar si excluir Part/Rehab según checkbox
-    excluir_part_rehab = 'incluir' not in (incluir_part_rehab or [])
-    
-    print(f"\n{'='*60}")
-    print(f"🔧 APLICAR FILTRO - DEBUG")
-    print(f"{'='*60}")
-    print(f"Métrica: {metrica_actual}")
-    print(f"Jugadores seleccionados: {len(jugadores_seleccionados)} -> {jugadores_seleccionados}")
-    print(f"Excluir Part/Rehab: {excluir_part_rehab}")
-    
-    # Limpiar cache de métricas (ya que cambiaron los filtros)
-    cache_data['metricas_cargadas'] = {}
-    
-    # OPTIMIZACIÓN: Usar tabla intermedia si está disponible
-    if cache_data.get('usa_tabla_intermedia'):
-        microciclo_id = cache_data.get('microciclo_id')
-        try:
-            print(f"⚡ Aplicando filtro desde tabla intermedia (microciclo: {microciclo_id})")
-            tabla, fig = generar_grafico_desde_tabla_intermedia(
-                microciclo_id, 
-                metrica_actual, 
-                jugadores_seleccionados, 
-                excluir_part_rehab
-            )
-            
-            # Guardar en cache con nueva key
-            cache_key = f"{metrica_actual}_{','.join(map(str, sorted(jugadores_seleccionados)))}_{excluir_part_rehab}"
-            cache_data['metricas_cargadas'][cache_key] = fig
-            
-            print(f"✅ Filtro aplicado: {len(jugadores_seleccionados)} jugadores, Part/Rehab={'incluido' if not excluir_part_rehab else 'excluido'}")
-            
-            return fig, metrica_actual, cache_data
-            
-        except Exception as e:
-            print(f"⚠️ Error con tabla intermedia: {e}")
-            import traceback
-            traceback.print_exc()
-            print("  Intentando método antiguo...")
-    
-    # FALLBACK: Método antiguo
-    start_date = cache_data.get('start_date')
-    end_date = cache_data.get('end_date')
-    
-    if not start_date or not end_date:
-        raise PreventUpdate
-    
-    try:
-        resultado = generar_tabla_y_grafico_equipo(start_date, end_date, metrica_actual, jugadores_seleccionados, excluir_part_rehab)
-        if isinstance(resultado, tuple) and len(resultado) == 2:
-            tabla, fig = resultado
-            
-            # Guardar en cache con nueva key
-            cache_key = f"{metrica_actual}_{','.join(map(str, sorted(jugadores_seleccionados)))}_{excluir_part_rehab}"
-            cache_data['metricas_cargadas'][cache_key] = fig
-            
-            print(f"✅ Filtro aplicado: {len(jugadores_seleccionados)} jugadores, Part/Rehab={'incluido' if not excluir_part_rehab else 'excluido'}")
-            
-            return fig, metrica_actual, cache_data
-    except Exception as e:
-        print(f"Error aplicando filtro: {e}")
-    
-    raise PreventUpdate
+# CALLBACKS DE FILTROS ELIMINADOS - Ya no se necesitan sin la sección de filtros de jugadores
+# La lógica de exclusión de porteros y Part/Rehab se mantiene en la carga inicial
 
 # Función SÚPER OPTIMIZADA usando tabla intermedia
 def generar_grafico_desde_tabla_intermedia(microciclo_id, metric, atleta_ids_filtro, excluir_part_rehab=True, maximos_precalculados=None, df_summary_precargado=None, umbrales_precargados=None, nombre_partido=None):
@@ -2584,7 +2428,7 @@ def generar_tabla_y_grafico_equipo(start_date, end_date, metric, atleta_ids_filt
     prevent_initial_call=False
 )
 def cambiar_pestana(n_clicks_equipo, n_clicks_jugadores, microciclos):
-    """Cambia entre las pestañas de Microciclo Equipo y Semana Jugadores (OPTIMIZADO)"""
+    """Cambia entre las pestañas de Microciclo Equipo y Microciclo Jugadores (OPTIMIZADO)"""
     ctx = callback_context
     
     style_active = {
@@ -2628,170 +2472,1203 @@ def cambiar_pestana(n_clicks_equipo, n_clicks_jugadores, microciclos):
     button_id = ctx.triggered[0]["prop_id"].split(".")[0]
     
     if button_id == "tab-cpe-jugadores":
-        return get_semana_jugadores_content(microciclos), style_inactive, style_active
+        return get_microciclo_jugadores_content(microciclos), style_inactive, style_active
     else:
         return get_microciclo_equipo_content(microciclos), style_active, style_inactive
 
 # ============================================
-# CALLBACKS PARA SEMANA JUGADORES
+# CALLBACKS PARA MICROCICLO JUGADORES
 # ============================================
 
-# Callback para cargar datos iniciales y mostrar selector de jugadores
+# Callback para cargar microciclo y mostrar selector de jugadores
 @callback(
     Output("sj-jugadores-container", "style"),
-    Output("sj-jugadores-dropdown", "options"),
-    Output("sj-jugadores-dropdown", "value"),
-    Output("sj-stacked-chart", "figure"),
-    Output("sj-part-rehab-store", "data"),
+    Output("sj-jugador-dropdown", "options"),
+    Output("sj-jugador-dropdown", "value"),
+    Output("sj-microciclo-cache", "data"),
     Input("sj-cargar-btn", "n_clicks"),
-    State("sj-date-store", "data"),
-    State("sj-metric-dropdown", "value"),
+    State("sj-microciclo-dropdown", "value"),
     prevent_initial_call=True
 )
-def cargar_datos_semana(n_clicks, date_data, metric):
-    """Carga datos iniciales y muestra selector de jugadores con los participantes del periodo (OPTIMIZADO)"""
-    if not date_data or 'start_date' not in date_data or 'end_date' not in date_data:
-        return {'display': 'none'}, [], [], {}, []
+def cargar_microciclo_jugadores(n_clicks, microciclo_id):
+    """Carga el microciclo y muestra selector de jugadores involucrados"""
+    if not microciclo_id:
+        return {'display': 'none'}, [], None, {}
     
-    start_date = date_data['start_date']
-    end_date = date_data['end_date']
+    print(f"🔄 Cargando microciclo para jugadores: {microciclo_id}")
     
-    if not start_date or not end_date:
-        return {'display': 'none'}, [], [], {}
-    
-    # Convertir fechas a timestamps (manejar ambos formatos)
-    try:
-        start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
-    except:
-        start_ts = int(datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S").timestamp())
-    
-    try:
-        end_ts = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
-    except:
-        end_ts = int(datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S").timestamp())
-    
-    # Obtener actividades
-    actividades = get_activities_by_date_range(start_ts, end_ts)
-    if actividades.empty:
-        return {'display': 'none'}, [], [], {}
-    
-    actividades = add_grupo_dia_column(actividades)
-    actividad_ids = actividades["id"].tolist() if "id" in actividades.columns else actividades["activity_id"].tolist()
-    
-    # Obtener participantes CON tags de participación
-    participantes = get_participants_for_activities(actividad_ids, include_participation_tags=True)
-    if participantes.empty:
-        return {'display': 'none'}, [], [], {}
-    
-    # Identificar jugadores que tienen AL MENOS UNA actividad Part/Rehab
-    jugadores_con_part_rehab = set()
-    for athlete_id in participantes['athlete_id'].unique():
-        athlete_participations = participantes[participantes['athlete_id'] == athlete_id]['participation_type'].tolist()
-        if 'Rehab' in athlete_participations or 'Part' in athlete_participations:
-            jugadores_con_part_rehab.add(athlete_id)
-    
-    # Obtener jugadores únicos que participaron (usando cache)
-    atleta_ids = participantes["athlete_id"].unique().tolist()
+    # Obtener jugadores del equipo (excluir porteros por defecto)
     atletas_df = get_cached_athletes()
-    atletas_periodo = atletas_df[atletas_df["id"].isin(atleta_ids)].copy()
-    
-    # Crear opciones del dropdown SIN indicadores por defecto
-    jugadores_options = [{'label': row['full_name'], 'value': row['id']} for _, row in atletas_periodo.iterrows()]
-    
-    # Por defecto: EXCLUIR porteros
-    atletas_sin_porteros = atletas_periodo[atletas_periodo['position_name'] != 'Goal Keeper']
+    atletas_sin_porteros = atletas_df[atletas_df['position_name'] != 'Goal Keeper'].copy()
     jugadores_ids = atletas_sin_porteros['id'].tolist()
     
-    # Generar gráfico inicial sin porteros, excluyendo actividades Part/Rehab
-    fig = generar_grafico_semana_jugadores(start_date, end_date, metric, jugadores_ids, excluir_part_rehab=True)
+    # Cargar microciclo con la función ultra-optimizada
+    from pages.seguimiento_carga_ultra_optimizado import cargar_microciclo_ultrarapido_v2
     
-    # Mostrar selector de jugadores
-    return {'display': 'block'}, jugadores_options, jugadores_ids, fig, list(jugadores_con_part_rehab)
+    resultado = cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids)
+    
+    if not resultado:
+        print("❌ Error cargando microciclo")
+        return {'display': 'none'}, [], None, {}
+    
+    # Obtener jugadores únicos que participaron en el microciclo
+    df_raw = resultado.get('df_raw')
+    if df_raw is None or df_raw.empty:
+        return {'display': 'none'}, [], None, {}
+    
+    jugadores_participantes = df_raw['athlete_id'].unique().tolist()
+    atletas_participantes = atletas_df[atletas_df['id'].isin(jugadores_participantes)].copy()
+    
+    # Identificar jugadores con actividades Part/Rehab
+    jugadores_con_part_rehab = set()
+    for athlete_id in jugadores_participantes:
+        athlete_data = df_raw[df_raw['athlete_id'] == athlete_id]
+        if 'participation_type' in athlete_data.columns:
+            if athlete_data['participation_type'].isin(['Part', 'Rehab']).any():
+                jugadores_con_part_rehab.add(athlete_id)
+    
+    print(f"  ℹ️ Jugadores con Part/Rehab: {len(jugadores_con_part_rehab)}")
+    
+    # Crear opciones del dropdown ordenadas por nombre (SIN indicadores por defecto)
+    atletas_participantes = atletas_participantes.sort_values('full_name')
+    jugadores_options = [
+        {'label': row['full_name'], 'value': row['id']} 
+        for _, row in atletas_participantes.iterrows()
+    ]
+    
+    # Seleccionar primer jugador por defecto
+    primer_jugador = jugadores_options[0]['value'] if jugadores_options else None
+    
+    print(f"✅ Microciclo cargado: {len(jugadores_options)} jugadores disponibles")
+    
+    # Cachear datos del microciclo (serializar DataFrames)
+    datos_serializados = {}
+    for metrica, df in resultado['datos_por_metrica'].items():
+        datos_serializados[metrica] = df.to_dict('records')
+    
+    cache_data = {
+        'microciclo_id': microciclo_id,
+        'datos_por_metrica': datos_serializados,
+        'maximos_historicos_equipo': resultado['maximos_historicos'],
+        'nombre_partido': resultado.get('nombre_partido'),
+        'df_raw': df_raw.to_dict('records'),
+        'jugadores_con_part_rehab': list(jugadores_con_part_rehab)  # ← NUEVO: Lista de IDs con Part/Rehab
+    }
+    
+    return {'display': 'block'}, jugadores_options, primer_jugador, cache_data
 
-# Callback para añadir/quitar porteros y actualizar indicadores (Semana Jugadores)
+# Callback para actualizar dropdown con indicadores cuando se marca el checkbox Part/Rehab
 @callback(
-    Output("sj-jugadores-dropdown", "options", allow_duplicate=True),
-    Output("sj-jugadores-dropdown", "value", allow_duplicate=True),
-    Input("sj-incluir-porteros", "value"),
+    Output("sj-jugador-dropdown", "options", allow_duplicate=True),
     Input("sj-incluir-part-rehab", "value"),
-    State("sj-jugadores-dropdown", "options"),
-    State("sj-jugadores-dropdown", "value"),
-    State("sj-part-rehab-store", "data"),
+    State("sj-microciclo-cache", "data"),
     prevent_initial_call=True
 )
-def toggle_filtros_jugadores(incluir_porteros, incluir_part_rehab, current_options, current_value, part_rehab_ids):
-    """Añade/quita porteros y actualiza indicadores visuales para Part/Rehab"""
-    if not current_options:
-        return current_options, current_value or []
+def toggle_indicadores_part_rehab_jugadores(incluir_part_rehab, cache_data):
+    """Actualiza el dropdown añadiendo indicadores visuales cuando se marca el checkbox"""
+    if not cache_data:
+        raise PreventUpdate
     
-    # Obtener todos los atletas disponibles
+    # Obtener lista de jugadores con Part/Rehab del cache
+    jugadores_con_part_rehab = set(cache_data.get('jugadores_con_part_rehab', []))
+    
+    # Obtener jugadores participantes del df_raw
+    df_raw = pd.DataFrame(cache_data.get('df_raw', []))
+    if df_raw.empty:
+        raise PreventUpdate
+    
     atletas_df = get_cached_athletes()
-    ids_disponibles = [opt['value'] for opt in current_options]
-    atletas_disponibles = atletas_df[atletas_df['id'].isin(ids_disponibles)].copy()
+    jugadores_participantes = df_raw['athlete_id'].unique().tolist()
+    atletas_participantes = atletas_df[atletas_df['id'].isin(jugadores_participantes)].copy()
+    atletas_participantes = atletas_participantes.sort_values('full_name')
     
-    # IDs con Part/Rehab
-    rehab_ids = set(part_rehab_ids) if part_rehab_ids else set()
-    
-    # Crear opciones con indicadores si Part/Rehab está marcado
-    nuevas_options = []
-    for _, row in atletas_disponibles.iterrows():
+    # Crear opciones con o sin indicadores según el checkbox
+    jugadores_options = []
+    for _, row in atletas_participantes.iterrows():
         label = row['full_name']
         
-        # Solo mostrar indicador si checkbox Part/Rehab está marcado Y el jugador tiene Part/Rehab
-        if 'incluir' in incluir_part_rehab and row['id'] in rehab_ids:
+        # Si el checkbox está marcado Y el jugador tiene Part/Rehab, añadir indicador
+        if 'incluir' in (incluir_part_rehab or []) and row['id'] in jugadores_con_part_rehab:
             label = f"⚠️ {label} (incluyendo entrenamientos rehab)"
         
-        nuevas_options.append({'label': label, 'value': row['id']})
+        jugadores_options.append({'label': label, 'value': row['id']})
     
-    # Empezar con la selección actual
-    seleccion_actual = set(current_value) if current_value else set()
+    print(f"🔄 Dropdown actualizado: {'CON' if 'incluir' in (incluir_part_rehab or []) else 'SIN'} indicadores Part/Rehab")
     
-    # Obtener IDs de porteros
-    porteros_ids = set(atletas_disponibles[atletas_disponibles['position_name'] == 'Goal Keeper']['id'].tolist())
-    
-    # Aplicar lógica de añadir/quitar SOLO PORTEROS
-    if 'incluir' in incluir_porteros:
-        # AÑADIR porteros a la selección actual
-        seleccion_actual = seleccion_actual.union(porteros_ids)
-    else:
-        # QUITAR porteros de la selección actual
-        seleccion_actual = seleccion_actual - porteros_ids
-    
-    # Part/Rehab NO modifica la selección, solo los indicadores y el filtrado en "Aplicar Filtro"
-    
-    return nuevas_options, list(seleccion_actual)
+    return jugadores_options
 
-# Callback para aplicar filtro de jugadores
+# Callback principal: Cargar datos del jugador y generar contenido completo (igual que Microciclo Equipo)
 @callback(
-    Output("sj-stacked-chart", "figure", allow_duplicate=True),
-    Input("sj-filtrar-btn", "n_clicks"),
-    State("sj-date-store", "data"),
-    State("sj-metric-dropdown", "value"),
-    State("sj-jugadores-dropdown", "value"),
-    State("sj-incluir-part-rehab", "value"),
+    Output("sj-contenido-jugador", "children"),
+    Output("sj-jugador-cache", "data"),
+    Output("sj-jugador-loaded", "data"),
+    Input("sj-jugador-dropdown", "value"),
+    Input("sj-incluir-part-rehab", "value"),
+    State("sj-microciclo-cache", "data"),
     prevent_initial_call=True
 )
-def update_semana_jugadores_chart(n_clicks, date_data, metric, jugadores_seleccionados, incluir_part_rehab):
-    """Aplica filtro de jugadores seleccionados y regenera gráfico"""
-    if not date_data or 'start_date' not in date_data or 'end_date' not in date_data:
-        return {}
+def cargar_datos_jugador(athlete_id, incluir_part_rehab, cache_data):
+    """Carga datos del jugador y genera contenido completo (IGUAL que Microciclo Equipo)"""
+    if not athlete_id or not cache_data:
+        return [html.Div([
+            html.P("Selecciona un jugador para ver el análisis", 
+                   className="text-center text-muted",
+                   style={'padding': '40px', 'fontSize': '14px'})
+        ])], {}, False
     
-    start_date = date_data['start_date']
-    end_date = date_data['end_date']
+    print(f"🎨 Cargando análisis para jugador: {athlete_id}")
+    print(f"  📋 Checkbox Part/Rehab: {incluir_part_rehab}")
     
-    if not start_date or not end_date or not jugadores_seleccionados:
-        return {}
+    # Obtener nombre del jugador
+    atletas_df = get_cached_athletes()
+    jugador = atletas_df[atletas_df['id'] == athlete_id]
+    nombre_jugador = jugador['full_name'].iloc[0] if not jugador.empty else athlete_id
     
-    # Determinar si excluir Part/Rehab según checkbox
+    # Importar función para calcular máximos individuales
+    from pages.seguimiento_carga_ultra_optimizado import calcular_maximo_individual_jugador
+    
+    # Obtener fecha del MD del microciclo (para buscar hacia atrás)
+    df_raw = pd.DataFrame(cache_data.get('df_raw', []))
+    print(f"  📊 Total registros antes de filtrar: {len(df_raw)}")
+    
+    # Filtrar por Part/Rehab si es necesario
     excluir_part_rehab = 'incluir' not in incluir_part_rehab
+    print(f"  🔍 Excluir Part/Rehab: {excluir_part_rehab}")
     
-    return generar_grafico_semana_jugadores(start_date, end_date, metric, jugadores_seleccionados, excluir_part_rehab=excluir_part_rehab)
+    if excluir_part_rehab and not df_raw.empty:
+        # Contar Part/Rehab antes de filtrar
+        part_rehab_count = df_raw[
+            df_raw['participation_type'].isin(['Part', 'Rehab'])
+        ].shape[0]
+        print(f"  ⚠️ Registros Part/Rehab encontrados: {part_rehab_count}")
+        
+        # Filtrar actividades Part/Rehab
+        df_raw = df_raw[
+            (df_raw['participation_type'].isna()) | 
+            (~df_raw['participation_type'].isin(['Part', 'Rehab']))
+        ]
+        print(f"  ✅ Total registros después de filtrar: {len(df_raw)}")
+    else:
+        print(f"  ℹ️ Incluyendo Part/Rehab (no se filtra)")
+    
+    # Filtrar datos del jugador (IGUAL QUE MICROCICLO EQUIPO)
+    df_jugador = df_raw[df_raw['athlete_id'] == athlete_id].copy()
+    
+    if df_jugador.empty:
+        return [html.Div([
+            html.P(f"No hay datos disponibles para {nombre_jugador} en este microciclo", 
+                   className="text-center text-muted",
+                   style={'padding': '40px', 'fontSize': '14px'})
+        ])], {}, False
+    
+    print(f"📊 Datos jugador: {len(df_jugador)} registros")
+    
+    # Obtener fecha del MD del microciclo actual
+    fecha_md_actual = None
+    df_md_jugador = df_jugador[df_jugador['activity_tag'] == 'MD']
+    if not df_md_jugador.empty:
+        fecha_md_actual = df_md_jugador['activity_date'].iloc[0]
+    
+    # IMPORTANTE: Para calcular máximos, usar fecha del MD (se INCLUYE como <= en la query)
+    # Igual que Microciclo Equipo: MD actual + 3 anteriores = últimos 4 MDs
+    fecha_referencia_maximos = fecha_md_actual
+    
+    print(f"📅 MD del microciclo: {fecha_md_actual}")
+    print(f"📊 Calculando máximos individuales: MD actual + 3 anteriores (últimos 4 MDs)")
+    
+    # Obtener nombre del partido del MD del microciclo actual (IGUAL QUE MICROCICLO EQUIPO)
+    nombre_partido_md = None
+    if not df_md_jugador.empty and 'activity_name' in df_md_jugador.columns:
+        if pd.notna(df_md_jugador['activity_name'].iloc[0]):
+            nombre_partido_md = df_md_jugador['activity_name'].iloc[0]
+            print(f"  ℹ️ Nombre del partido MD: {nombre_partido_md}")
+    
+    # USAR FUNCIÓN CENTRALIZADA PARA MÉTRICAS (MISMAS QUE MICROCICLO EQUIPO)
+    metricas_info = get_metricas_disponibles()
+    
+    print(f"⚡ PRE-CALCULANDO máximos y gráficos para {nombre_jugador}...")
+    
+    # PRE-CALCULAR TODOS LOS MÁXIMOS DE UNA VEZ (OPTIMIZADO)
+    maximos_jugador = {}
+    warnings_jugador = {}
+    graficos_jugador = {}  # Almacenar gráficos pre-generados
+    partidos_considerados = []  # Lista de partidos usados en el cálculo
+    
+    # OPTIMIZACIÓN: Obtener partidos UNA SOLA VEZ para todas las métricas
+    print(f"🔍 Obteniendo partidos +70' para jugador {athlete_id}...")
+    
+    # Verificar si hay fecha de referencia
+    if not fecha_referencia_maximos:
+        print(f"  ⚠️ No hay MD del jugador en este microciclo")
+        print(f"  🔍 FALLBACK: Buscando último partido +70' histórico del jugador...")
+        
+        # FALLBACK: Buscar último partido +70' sin límite de fecha
+        engine = get_db_connection()
+        if engine:
+            try:
+                query_fallback = f'''
+                    SELECT 
+                        activity_date,
+                        activity_name,
+                        field_time,
+                        total_distance,
+                        distancia_21_kmh,
+                        distancia_24_kmh,
+                        acc_dec_total,
+                        ritmo_medio
+                    FROM microciclos_metricas_procesadas
+                    WHERE athlete_id = '{athlete_id}'
+                    AND activity_tag = 'MD'
+                    AND field_time >= 4200
+                    ORDER BY activity_date DESC
+                    LIMIT 4
+                '''
+                
+                df_partidos_fallback = pd.read_sql(query_fallback, engine)
+                
+                if not df_partidos_fallback.empty:
+                    print(f"  ✅ Encontrados {len(df_partidos_fallback)} partidos +70' históricos")
+                    
+                    # Guardar info de partidos considerados
+                    partidos_considerados = [
+                        {
+                            'partido': row['activity_name'],
+                            'fecha': pd.to_datetime(row['activity_date']).strftime('%d/%m/%Y'),
+                            'minutos': int(row['field_time'] / 60) if pd.notna(row['field_time']) else 0
+                        }
+                        for _, row in df_partidos_fallback.iterrows()
+                    ]
+                    
+                    # Calcular máximos
+                    for metrica_info in metricas_info:
+                        metrica = metrica_info['id']
+                        
+                        if metrica in df_partidos_fallback.columns:
+                            df_partidos_fallback[f'{metrica}_std'] = df_partidos_fallback[metrica] * (5640 / df_partidos_fallback['field_time'])
+                            idx_max = df_partidos_fallback[f'{metrica}_std'].idxmax()
+                            
+                            maximos_jugador[metrica] = {
+                                'max': df_partidos_fallback.loc[idx_max, f'{metrica}_std'],
+                                'partido_max': df_partidos_fallback.loc[idx_max, 'activity_name'],
+                                'fecha_max': df_partidos_fallback.loc[idx_max, 'activity_date'],
+                                'tiene_datos': True,
+                                'ultimo_md_fecha': df_partidos_fallback['activity_date'].iloc[0],
+                                'warning': f'⚠️ Jugador no jugó MD en este microciclo. Usando últimos {len(df_partidos_fallback)} partidos +70\' históricos',
+                                'num_partidos': len(df_partidos_fallback)
+                            }
+                            
+                            if maximos_jugador[metrica].get('warning'):
+                                warnings_jugador[metrica] = maximos_jugador[metrica]['warning']
+                else:
+                    print(f"  ❌ No hay partidos +70' históricos - No se pueden calcular máximos")
+                    for metrica_info in metricas_info:
+                        maximos_jugador[metrica_info['id']] = {
+                            'tiene_datos': False,
+                            'warning': '🔴 Sin partidos +70\' disponibles',
+                            'num_partidos': 0
+                        }
+            except Exception as e:
+                print(f"  ❌ Error en fallback: {e}")
+                for metrica_info in metricas_info:
+                    maximos_jugador[metrica_info['id']] = {
+                        'tiene_datos': False,
+                        'warning': f'Error: {str(e)}',
+                        'num_partidos': 0
+                    }
+        else:
+            print(f"  ❌ Error de conexión a BD")
+            for metrica_info in metricas_info:
+                maximos_jugador[metrica_info['id']] = {
+                    'tiene_datos': False,
+                    'warning': 'Error de conexión',
+                    'num_partidos': 0
+                }
+    else:
+        engine = get_db_connection()
+        if engine:
+            try:
+                # Formatear fecha de referencia (puede venir como string o datetime)
+                if isinstance(fecha_referencia_maximos, str):
+                    # Ya es string, verificar formato
+                    if len(fecha_referencia_maximos) == 10 and '-' in fecha_referencia_maximos:
+                        fecha_ref_str = fecha_referencia_maximos  # Ya está en formato YYYY-MM-DD
+                    else:
+                        # Convertir a datetime y formatear
+                        fecha_ref_str = pd.to_datetime(fecha_referencia_maximos).strftime('%Y-%m-%d')
+                else:
+                    # Es datetime, formatear
+                    fecha_ref_str = fecha_referencia_maximos.strftime('%Y-%m-%d')
+                
+                print(f"  📅 Fecha referencia: {fecha_ref_str} (tipo: {type(fecha_referencia_maximos).__name__})")
+                print(f"  🔎 Buscando en microciclos_metricas_procesadas...")
+                
+                # Query para obtener partidos del jugador (usa tabla intermedia como la función original)
+                # CRÍTICO: Verificar primero si hay algún MD para este jugador
+                query_test = f'''
+                SELECT COUNT(*) as total
+                FROM microciclos_metricas_procesadas
+                WHERE athlete_id = '{athlete_id}'
+                    AND activity_tag = 'MD'
+                '''
+                
+                df_test = pd.read_sql(query_test, engine)
+                total_mds = df_test['total'].iloc[0]
+                print(f"  📊 Total MDs del jugador en BD: {total_mds}")
+                
+                if total_mds > 0:
+                    # Ver algunos MDs para debug
+                    query_sample = f'''
+                        SELECT activity_date, activity_name, field_time
+                        FROM microciclos_metricas_procesadas
+                        WHERE athlete_id = '{athlete_id}'
+                        AND activity_tag = 'MD'
+                        ORDER BY activity_date DESC
+                        LIMIT 5
+                    '''
+                    df_sample = pd.read_sql(query_sample, engine)
+                    print(f"  📋 Últimos 5 MDs del jugador:")
+                    for _, row in df_sample.iterrows():
+                        minutos = int(row['field_time'] / 60) if pd.notna(row['field_time']) else 0
+                        print(f"     - {row['activity_date']} | {row['activity_name']} | {minutos}' jugados")
+                
+                # Query para obtener partidos del jugador
+                query = f'''
+                SELECT 
+                    activity_date,
+                    activity_name,
+                    field_time,
+                    total_distance,
+                    distancia_21_kmh,
+                    distancia_24_kmh,
+                    acc_dec_total,
+                    ritmo_medio
+                    FROM microciclos_metricas_procesadas
+                    WHERE athlete_id = '{athlete_id}'
+                    AND activity_tag = 'MD'
+                    AND field_time >= 4200
+                    AND activity_date <= '{fecha_ref_str}'
+                    ORDER BY activity_date DESC
+                    LIMIT 4
+                '''
+                
+                print(f"  🔍 Ejecutando query con filtro +70' (field_time >= 4200)...")
+                try:
+                    df_partidos = pd.read_sql(query, engine)
+                    print(f"  📈 Partidos +70' encontrados: {len(df_partidos)}")
+                    if not df_partidos.empty:
+                        print(f"  📊 Columnas disponibles: {list(df_partidos.columns)}")
+                except Exception as e_query:
+                    print(f"  ❌ Error en query principal: {e_query}")
+                    # Intentar query simplificada
+                    query_simple = f'''
+                        SELECT *
+                        FROM microciclos_metricas_procesadas
+                        WHERE athlete_id = '{athlete_id}'
+                        AND activity_tag = 'MD'
+                        AND field_time >= 4200
+                        LIMIT 1
+                    '''
+                    df_partidos = pd.read_sql(query_simple, engine)
+                    if not df_partidos.empty:
+                        print(f"  📋 Columnas en tabla: {list(df_partidos.columns)}")
+                    raise e_query
+                
+                if not df_partidos.empty:
+                    print(f"  ✅ {len(df_partidos)} partidos +70' encontrados")
+                    
+                    # Guardar info de partidos considerados
+                    # activity_date viene como string 'YYYY-MM-DD' de microciclos_metricas_procesadas
+                    partidos_considerados = [
+                        {
+                            'partido': row['activity_name'],
+                            'fecha': pd.to_datetime(row['activity_date']).strftime('%d/%m/%Y'),
+                            'minutos': int(row['field_time'] / 60) if pd.notna(row['field_time']) else 0
+                        }
+                        for _, row in df_partidos.iterrows()
+                    ]
+                    
+                    # Calcular máximos para TODAS las métricas de una vez
+                    for metrica_info in metricas_info:
+                        metrica = metrica_info['id']
+                        
+                        if metrica in df_partidos.columns:
+                            # Estandarizar a 94 minutos
+                            df_partidos[f'{metrica}_std'] = df_partidos[metrica] * (5640 / df_partidos['field_time'])
+                            
+                            # Obtener el máximo
+                            idx_max = df_partidos[f'{metrica}_std'].idxmax()
+                            
+                            maximos_jugador[metrica] = {
+                                'max': df_partidos.loc[idx_max, f'{metrica}_std'],
+                                'partido_max': df_partidos.loc[idx_max, 'activity_name'],
+                                'fecha_max': df_partidos.loc[idx_max, 'activity_date'],  # String 'YYYY-MM-DD'
+                                'tiene_datos': True,
+                                'ultimo_md_fecha': df_partidos['activity_date'].iloc[0],  # String 'YYYY-MM-DD'
+                                'warning': f'⚠️ Solo {len(df_partidos)} partido(s) +70\' en últimos 4 MDs' if len(df_partidos) < 4 else None,
+                                'num_partidos': len(df_partidos)
+                            }
+                            
+                            if maximos_jugador[metrica].get('warning'):
+                                warnings_jugador[metrica] = maximos_jugador[metrica]['warning']
+                else:
+                    print(f"  ⚠️ No se encontraron partidos +70' para el jugador")
+                    for metrica_info in metricas_info:
+                        maximos_jugador[metrica_info['id']] = {
+                            'tiene_datos': False,
+                            'warning': '🔴 Sin partidos +70\' disponibles',
+                            'num_partidos': 0
+                        }
+            except Exception as e:
+                print(f"  ❌ Error obteniendo partidos: {e}")
+                for metrica_info in metricas_info:
+                    maximos_jugador[metrica_info['id']] = {
+                        'tiene_datos': False,
+                        'warning': f'Error: {str(e)}',
+                        'num_partidos': 0
+                    }
+        else:
+            print(f"  ❌ Error de conexión a BD")
+            for metrica_info in metricas_info:
+                maximos_jugador[metrica_info['id']] = {
+                    'tiene_datos': False,
+                    'warning': 'Error de conexión',
+                    'num_partidos': 0
+                }
+    
+    # Procesar datos por día y PRE-GENERAR GRÁFICOS (IGUAL QUE MICROCICLO EQUIPO)
+    datos_por_metrica_jugador = {}
+    
+    for metrica_info in metricas_info:
+        metrica = metrica_info['id']  # Ya son nombres de columnas de BD
+        metrica_label = metrica_info['label']
+        
+        if metrica in df_jugador.columns:
+            # Separar ENTRENAMIENTOS y MD (igual que ultra-optimizado)
+            df_entrenos = df_jugador[df_jugador['activity_tag'] != 'MD'].copy()
+            df_md = df_jugador[df_jugador['activity_tag'] == 'MD'].copy()
+            
+            # Agrupar entrenamientos (suma de sesiones por día)
+            if not df_entrenos.empty:
+                df_metrica_entrenos = df_entrenos.groupby('activity_tag').agg({
+                    metrica: 'sum',
+                    'activity_date': 'first'
+                }).reset_index()
+                df_metrica_entrenos.columns = ['activity_tag', 'avg_metric', 'fecha']
+            else:
+                df_metrica_entrenos = pd.DataFrame(columns=['activity_tag', 'avg_metric', 'fecha'])
+            
+            # Procesar MD (estandarización a 94' igual que ultra-optimizado)
+            if not df_md.empty:
+                df_metrica_md = df_md.groupby('activity_tag').agg({
+                    metrica: 'first',  # Solo hay 1 registro por jugador en MD
+                    'activity_date': 'first',
+                    'field_time': 'first' if 'field_time' in df_md.columns else None
+                }).reset_index()
+                df_metrica_md.columns = ['activity_tag', 'avg_metric', 'fecha', 'field_time'] if 'field_time' in df_md.columns else ['activity_tag', 'avg_metric', 'fecha']
+                
+                # Estandarizar a 94 minutos (igual que ultra-optimizado líneas 294-300)
+                if 'field_time' in df_metrica_md.columns and pd.notna(df_metrica_md['field_time'].iloc[0]):
+                    field_time = df_metrica_md['field_time'].iloc[0]
+                    if field_time >= 4200 and metrica in ['total_distance', 'distancia_21_kmh', 'distancia_24_kmh', 'acc_dec_total']:
+                        # Estandarizar (excepto ritmo_medio)
+                        df_metrica_md['avg_metric'] = df_metrica_md['avg_metric'] * (5640 / field_time)
+                        print(f"    → MD {metrica}: {df_metrica_md['avg_metric'].iloc[0]:.1f} (estand. desde {field_time/60:.0f}')")
+                
+                # Combinar entrenamientos + MD
+                df_metrica = pd.concat([df_metrica_entrenos, df_metrica_md[['activity_tag', 'avg_metric', 'fecha', 'field_time'] if 'field_time' in df_metrica_md.columns else ['activity_tag', 'avg_metric', 'fecha']]], ignore_index=True)
+            else:
+                df_metrica = df_metrica_entrenos
+            
+            # Añadir columna count_athletes = 1 (jugador individual)
+            df_metrica['count_athletes'] = 1
+            
+            datos_por_metrica_jugador[metrica] = df_metrica
+            
+            # 2. PRE-GENERAR GRÁFICO para esta métrica
+            try:
+                # df_metrica ya tiene las columnas correctas: activity_tag, avg_metric, fecha, count_athletes
+                df_for_graph = df_metrica.copy()
+                
+                # Obtener máximo individual
+                maximo_info = maximos_jugador.get(metrica, {})
+                max_historico_md = maximo_info.get('max')
+                partido_max = maximo_info.get('partido_max', '')
+                fecha_max = maximo_info.get('fecha_max')
+                
+                maximos_historicos_jugador = {
+                    'max': max_historico_md,
+                    'min': None,
+                    'partido_max': partido_max,  # ← Clave correcta para línea naranja (máximo histórico)
+                    'fecha_max': fecha_max
+                } if max_historico_md else None
+                
+                # Generar gráfico usando nombre del partido del MD del microciclo (barra azul)
+                fig = generar_grafico_optimizado_precargado(
+                    df_summary=df_for_graph,
+                    metric=metrica,
+                    metrica_label=metrica_label,
+                    maximos_historicos=maximos_historicos_jugador,
+                    umbrales_df=None,
+                    nombre_partido=nombre_partido_md  # ← PARTIDO DEL MICROCICLO ACTUAL (no del máximo)
+                )
+                
+                graficos_jugador[metrica] = fig
+                print(f"  ✅ Gráfico generado: {metrica}")
+                
+            except Exception as e:
+                print(f"  ❌ Error generando gráfico {metrica}: {e}")
+                graficos_jugador[metrica] = go.Figure()
+    
+    print(f"✅ Pre-cálculo completado: {len(graficos_jugador)} gráficos generados")
+    
+    # ESTRUCTURA IGUAL QUE MICROCICLO EQUIPO
+    contenido = []
+    
+    # 1. CARD DE RESUMEN (Seguimiento de Carga) - ESTILO IDÉNTICO A MICROCICLO EQUIPO
+    contenido.append(
+        dbc.Card([
+            dbc.CardBody([
+                html.H5(f"Seguimiento de Carga - {nombre_jugador}", style={
+                    'color': '#1e3d59',
+                    'fontWeight': '600',
+                    'fontSize': '18px',
+                    'marginBottom': '20px'
+                }),
+                html.Div(id="sj-progress-bar-container", children=[
+                    html.Div("Cargando seguimiento de carga...", className="text-center text-muted p-4")
+                ])
+            ])
+        ], className="mb-4", style={
+            'backgroundColor': 'white',
+            'borderRadius': '12px',
+            'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
+            'border': 'none'
+        })
+    )
+    
+    # 2. CARD DE SELECTOR DE MÉTRICAS
+    contenido.append(
+        html.Div(id="sj-metricas-container", children=[
+            dbc.Card([
+                dbc.CardBody([
+                    html.Label("Selecciona Métrica para Ver Detalle:", style={
+                        'fontWeight': '600',
+                        'fontSize': '14px',
+                        'color': '#1e3d59',
+                        'marginBottom': '12px',
+                        'display': 'block'
+                    }),
+                    # Primera fila: 3 botones
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Button(
+                                [html.I(className=f"fas {m['icon']} me-2"), m['label']],
+                                id={'type': 'sj-metric-btn', 'index': m['id']},
+                                color="light",
+                                style={
+                                    'backgroundColor': '#1e3d59' if idx == 0 else '#f8f9fa',
+                                    'color': 'white' if idx == 0 else '#1e3d59',
+                                    'border': '1px solid #e0e0e0',
+                                    'borderRadius': '8px',
+                                    'padding': '12px 16px',
+                                    'fontWeight': '600' if idx == 0 else '500',
+                                    'fontSize': '13px',
+                                    'marginBottom': '10px',
+                                    'transition': 'all 0.2s ease',
+                                    'width': '100%',
+                                    'textAlign': 'left'
+                                },
+                                className="metric-button"
+                            )
+                        ], width=12, md=6, lg=4, className="mb-2")
+                        for idx, m in enumerate(metricas_info[:3])
+                    ]),
+                    # Segunda fila: 3 botones
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Button(
+                                [html.I(className=f"fas {m['icon']} me-2"), m['label']],
+                                id={'type': 'sj-metric-btn', 'index': m['id']},
+                                color="light",
+                                style={
+                                    'backgroundColor': '#f8f9fa',
+                                    'color': '#1e3d59',
+                                    'border': '1px solid #e0e0e0',
+                                    'borderRadius': '8px',
+                                    'padding': '12px 16px',
+                                    'fontWeight': '500',
+                                    'fontSize': '13px',
+                                    'marginBottom': '10px',
+                                    'transition': 'all 0.2s ease',
+                                    'width': '100%',
+                                    'textAlign': 'left'
+                                },
+                                className="metric-button"
+                            )
+                        ], width=12, md=6, lg=4, className="mb-2")
+                        for m in metricas_info[3:]
+                    ], justify="center")
+                ])
+            ], className="mb-4", style={
+                'backgroundColor': 'white',
+                'borderRadius': '12px',
+                'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
+                'border': 'none'
+            })
+        ])
+    )
+    
+    # 3. CARD DE GRÁFICO
+    contenido.append(
+        dbc.Card([
+            dbc.CardBody([
+                html.H5("Visualización de carga microciclo (MD-4 a MD)", style={
+                    'color': '#1e3d59',
+                    'fontWeight': '600',
+                    'fontSize': '18px',
+                    'marginBottom': '20px'
+                }),
+                dcc.Loading(
+                    id="sj-loading-bar",
+                    type="circle",
+                    children=[
+                        dcc.Graph(id="sj-bar-chart", config={'displayModeBar': False})
+                    ]
+                )
+            ])
+        ], className="mb-4", style={
+            'backgroundColor': 'white',
+            'borderRadius': '12px',
+            'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
+            'border': 'none'
+        })
+    )
+    
+    # LOS WARNINGS AHORA SE MUESTRAN EN EL PANEL INFORMATIVO (mostrar_info_maximos_jugador)
+    # No necesitamos mostrarlos aquí de nuevo
+    
+    # Cachear datos del jugador (INCLUIR GRÁFICOS PRE-GENERADOS Y PARTIDOS CONSIDERADOS)
+    jugador_cache = {
+        'athlete_id': athlete_id,
+        'nombre': nombre_jugador,
+        'maximos': maximos_jugador,
+        'graficos': graficos_jugador,  # ← GRÁFICOS PRE-GENERADOS (como en Microciclo Equipo)
+        'partidos_considerados': partidos_considerados,  # ← LISTA DE PARTIDOS CON MINUTOS
+        'datos_por_metrica': {k: v.to_dict('records') for k, v in datos_por_metrica_jugador.items()},
+        'df_jugador': df_jugador.to_dict('records')
+    }
+    
+    # Generar timestamp único para trigger (IGUAL QUE MICROCICLO EQUIPO)
+    import time
+    timestamp = time.time()
+    
+    return contenido, jugador_cache, timestamp
+
+# Callback para mostrar panel informativo de máximos del jugador
+@callback(
+    Output("sj-info-maximos-container", "children"),
+    Output("sj-info-maximos-container", "style"),
+    Input("sj-jugador-loaded", "data"),
+    State("sj-jugador-cache", "data"),
+    prevent_initial_call=True
+)
+def mostrar_info_maximos_jugador(loaded_timestamp, jugador_cache):
+    """Genera panel informativo con los máximos calculados del jugador"""
+    
+    if not loaded_timestamp or not jugador_cache or not jugador_cache.get('athlete_id'):
+        return html.Div(), {'display': 'none'}
+    
+    nombre_jugador = jugador_cache.get('nombre', '')
+    maximos = jugador_cache.get('maximos', {})
+    partidos_considerados = jugador_cache.get('partidos_considerados', [])
+    
+    # Verificar si tiene datos
+    tiene_datos = any(m.get('tiene_datos') for m in maximos.values())
+    
+    if not tiene_datos:
+        return dbc.Alert([
+            html.I(className="fas fa-exclamation-triangle me-2"),
+            html.Strong("Sin datos suficientes: "),
+            f"{nombre_jugador} no tiene partidos con +70 minutos registrados. No se pueden calcular máximos individuales."
+        ], color="danger"), {'display': 'block', 'marginBottom': '20px'}
+    
+    # Obtener info del primer máximo para datos generales
+    primer_max = next((m for m in maximos.values() if m.get('tiene_datos')), {})
+    num_partidos = primer_max.get('num_partidos', 0)
+    ultimo_md_fecha_raw = primer_max.get('ultimo_md_fecha')
+    
+    # Formatear fecha último MD (viene como string 'YYYY-MM-DD' de microciclos_metricas_procesadas)
+    if ultimo_md_fecha_raw:
+        try:
+            ultimo_md_fecha = pd.to_datetime(ultimo_md_fecha_raw).strftime('%d/%m/%Y')
+        except:
+            ultimo_md_fecha = str(ultimo_md_fecha_raw)
+    else:
+        ultimo_md_fecha = None
+    
+    # USAR FUNCIÓN CENTRALIZADA PARA LABELS (igual que botones)
+    metricas_disponibles = get_metricas_disponibles()
+    metricas_labels = {m['id']: m['label_corto'] for m in metricas_disponibles}
+    
+    filas_tabla = []
+    for metrica_id, label in metricas_labels.items():
+        max_info = maximos.get(metrica_id, {})
+        if max_info.get('tiene_datos'):
+            max_value = max_info.get('max', 0)
+            partido = max_info.get('partido_max', 'N/A')
+            fecha = max_info.get('fecha_max')
+            
+            # Formatear fecha (viene como string 'YYYY-MM-DD' de microciclos_metricas_procesadas)
+            if fecha:
+                try:
+                    fecha_str = pd.to_datetime(fecha).strftime('%d/%m/%Y')
+                except:
+                    fecha_str = str(fecha)
+            else:
+                fecha_str = 'N/A'
+            
+            filas_tabla.append(
+                html.Tr([
+                    html.Td(label, style={'fontWeight': '500', 'color': '#495057'}),
+                    html.Td(f"{max_value:.1f}", style={'fontWeight': '600', 'color': '#1e3d59'}),
+                    html.Td(partido, style={'fontSize': '12px', 'color': '#6c757d'}),
+                    html.Td(fecha_str, style={'fontSize': '12px', 'color': '#6c757d'})
+                ])
+            )
+    
+    # Determinar color del badge según número de partidos
+    if num_partidos >= 4:
+        badge_color = "success"
+        badge_icon = "fa-check-circle"
+    elif num_partidos >= 2:
+        badge_color = "warning"
+        badge_icon = "fa-exclamation-circle"
+    else:
+        badge_color = "danger"
+        badge_icon = "fa-exclamation-triangle"
+    
+    panel = dbc.Card([
+        dbc.CardBody([
+            dbc.Row([
+                dbc.Col([
+                    html.Div([
+                        html.I(className="fas fa-info-circle me-2", style={'color': '#1e3d59'}),
+                        html.Strong("Máximos Individuales Calculados", style={'color': '#1e3d59', 'fontSize': '14px'})
+                    ], style={'marginBottom': '10px'}),
+                    html.P([
+                        "Los umbrales se calculan en base a los ",
+                        html.Strong(f"últimos {num_partidos} partidos con +70 minutos"),
+                        " jugados, estandarizados a 94 minutos."
+                    ], style={'fontSize': '13px', 'color': '#6c757d', 'marginBottom': '15px'}),
+                ], width=12),
+            ]),
+            
+            dbc.Row([
+                dbc.Col([
+                    dbc.Badge([
+                        html.I(className=f"fas {badge_icon} me-1"),
+                        f"{num_partidos} partido{'s' if num_partidos != 1 else ''} +70' considerado{'s' if num_partidos != 1 else ''}"
+                    ], color=badge_color, className="me-2", style={'fontSize': '12px'}),
+                    
+                    html.Small([
+                        "Último partido: ",
+                        html.Strong(ultimo_md_fecha if ultimo_md_fecha else 'N/A')
+                    ], style={'color': '#6c757d'})
+                ], width=12, className="mb-3")
+            ]),
+            
+            # Tabla de máximos por métrica
+            html.Div([
+                html.Strong("Máximos por Métrica:", style={'fontSize': '13px', 'color': '#495057', 'display': 'block', 'marginBottom': '10px'}),
+                dbc.Table([
+                    html.Thead([
+                        html.Tr([
+                            html.Th("Métrica", style={'fontSize': '12px', 'color': '#6c757d', 'fontWeight': '600'}),
+                            html.Th("Máximo", style={'fontSize': '12px', 'color': '#6c757d', 'fontWeight': '600'}),
+                            html.Th("Partido del Máximo", style={'fontSize': '12px', 'color': '#6c757d', 'fontWeight': '600'}),
+                            html.Th("Fecha", style={'fontSize': '12px', 'color': '#6c757d', 'fontWeight': '600'})
+                        ])
+                    ]),
+                    html.Tbody(filas_tabla)
+                ], size="sm", bordered=True, hover=True, style={'fontSize': '13px'})
+            ], className="mb-3"),
+            
+            # Lista de partidos considerados en el cálculo (TODOS los 4, con minutos)
+            html.Div([
+                html.Hr(style={'margin': '20px 0'}),
+                html.Strong(
+                    f"Partidos considerados en el cálculo ({len(partidos_considerados)} partidos):", 
+                    style={'fontSize': '13px', 'color': '#495057', 'display': 'block', 'marginBottom': '10px'}
+                ),
+                html.Ul([
+                    html.Li([
+                        html.Strong(p['partido'], style={'color': '#1e3d59', 'fontSize': '12px'}),
+                        html.Span(f" ({p['fecha']})", style={'color': '#6c757d'}),
+                        html.Span(f" - {p['minutos']}' jugados", style={'color': '#28a745', 'fontWeight': '600', 'fontSize': '11px', 'marginLeft': '8px'})
+                    ], style={'fontSize': '12px', 'marginBottom': '5px'})
+                    for p in partidos_considerados
+                ], style={'paddingLeft': '20px', 'marginBottom': '0'}) if partidos_considerados else html.P(
+                    "No hay partidos registrados", 
+                    style={'fontSize': '12px', 'color': '#6c757d', 'fontStyle': 'italic'}
+                )
+            ])
+        ])
+    ], className="mb-4", style={
+        'backgroundColor': '#f8f9fa',
+        'borderRadius': '12px',
+        'border': '1px solid #e0e0e0'
+    })
+    
+    return panel, {'display': 'block', 'marginBottom': '20px'}
+
+
+# Callback para generar barras de progreso del jugador
+@callback(
+    Output("sj-progress-bar-container", "children"),
+    Input("sj-jugador-loaded", "data"),
+    State("sj-jugador-cache", "data"),
+    prevent_initial_call=True
+)
+def generar_barras_jugador(loaded_timestamp, jugador_cache):
+    """Genera barras de progreso para el jugador individual"""
+    
+    if not loaded_timestamp or not jugador_cache or not jugador_cache.get('athlete_id'):
+        return html.Div()
+    
+    print(f"📊 Generando barras de progreso para jugador (desde cache)")
+    
+    # Obtener datos del cache
+    graficos = jugador_cache.get('graficos', {})
+    maximos = jugador_cache.get('maximos', {})
+    datos_por_metrica = jugador_cache.get('datos_por_metrica', {})
+    
+    if not graficos:
+        return html.Div("No hay datos disponibles", className="text-center text-muted p-4")
+    
+    # DETECTAR TIPO DE MICROCICLO (igual que Microciclo Equipo)
+    dias_presentes = []
+    for metrica, datos in datos_por_metrica.items():
+        if datos:
+            df_temp = pd.DataFrame(datos)
+            if not df_temp.empty:
+                dias_presentes = df_temp['activity_tag'].unique().tolist()
+                break
+    
+    tipo_microciclo = detectar_tipo_microciclo(dias_presentes)
+    print(f"🔍 Tipo de microciclo: {tipo_microciclo.upper()}")
+    print(f"   Días presentes: {dias_presentes}")
+    
+    # USAR MISMA CONFIGURACIÓN QUE MICROCICLO EQUIPO
+    metricas_config = get_metricas_config_por_tipo(tipo_microciclo)
+    
+    # Colores para días (igual que Microciclo Equipo)
+    colores_dias = {
+        'MD-5': '#b3cde3',
+        'MD-4': '#6baed6',
+        'MD-3': '#4292c6',
+        'MD-2': '#2171b5',
+        'MD-1': '#08519c'
+    }
+    
+    barras_html = []
+    
+    for config in metricas_config:
+        metric_id = config['id']
+        
+        # Obtener figura y máximo del cache
+        fig = graficos.get(metric_id)
+        max_historico = maximos.get(metric_id, {}).get('max')
+        
+        if not fig or not max_historico or max_historico <= 0:
+            continue
+        
+        try:
+            # Determinar si es métrica de suma o media
+            es_media = config.get('tipo') == 'media'
+            
+            # Extraer valores de entrenamientos (MD-X) del gráfico
+            entrenamientos_con_porcentaje = []
+            valores_entrenamientos = []
+            
+            for trace in fig.get('data', []):
+                dia = trace.get('name', '').split(' ')[0]
+                if dia and dia.startswith('MD-') and dia != 'MD':
+                    valor = trace.get('y', [0])[0] if trace.get('y') else 0
+                    if valor and valor > 0:
+                        porcentaje = (valor / max_historico) * 100
+                        valores_entrenamientos.append(porcentaje)
+                        entrenamientos_con_porcentaje.append({
+                            'nombre': dia,
+                            'porcentaje': porcentaje,
+                            'color': colores_dias.get(dia, '#6c757d')
+                        })
+            
+            # Ordenar días correctamente
+            entrenamientos_con_porcentaje.sort(key=lambda x: x['nombre'], reverse=True)
+            
+            # Calcular acumulado según tipo de métrica (igual que Microciclo Equipo)
+            if es_media and valores_entrenamientos:
+                acumulado_total = sum(valores_entrenamientos) / len(valores_entrenamientos)
+            else:
+                acumulado_total = sum(valores_entrenamientos)
+            
+            # Determinar color
+            if acumulado_total < config['min']:
+                color_acumulado = '#dc3545'  # Rojo - Por debajo
+            elif acumulado_total <= config['max']:
+                color_acumulado = '#28a745'  # Verde - Óptimo
+            else:
+                color_acumulado = '#dc3545'  # Rojo - Por encima
+            
+            # Crear barra con segmentos o única según tipo
+            # Para MEDIA: barra única (igual que Microciclo Equipo)
+            if es_media:
+                barra_contenido = html.Div(
+                    f"{acumulado_total:.0f}%",
+                    style={
+                        'width': f"{min(100, (acumulado_total / config['max']) * 100)}%",
+                        'backgroundColor': '#1e3d59',  # Azul marino siempre
+                        'color': 'white',
+                        'fontSize': '13px',
+                        'fontWeight': '600',
+                        'textAlign': 'center',
+                        'lineHeight': '40px',
+                        'textShadow': '0 0 3px rgba(0,0,0,0.5)',
+                        'height': '100%',
+                        'borderRadius': '6px 0 0 6px'
+                    }
+                )
+            else:
+                # Para SUMA: segmentos por día
+                barra_contenido = [
+                    html.Div(
+                        f"{e['porcentaje']:.0f}%",
+                        style={
+                            'width': f"{min(100, (e['porcentaje'] / config['max']) * 100)}%",
+                            'backgroundColor': e['color'],
+                            'color': 'white',
+                            'fontSize': '11px',
+                            'fontWeight': '600',
+                            'textAlign': 'center',
+                            'lineHeight': '40px',
+                            'textShadow': '0 0 3px rgba(0,0,0,0.5)',
+                            'display': 'inline-block',
+                            'height': '100%'
+                        }
+                    )
+                    for e in entrenamientos_con_porcentaje
+                ]
+            
+            # Calcular posición del mínimo
+            pos_min = (config['min'] / config['max']) * 100 if config['max'] > 0 else 0
+            
+            # Crear barra HTML - FORMATO IDÉNTICO A MICROCICLO EQUIPO
+            barra_metrica = html.Div([
+                dbc.Row([
+                    # Columna izquierda: Nombre de la métrica
+                    dbc.Col([
+                        html.Div(config['label'], style={
+                            'fontWeight': '600',
+                            'fontSize': '13px',
+                            'color': '#1e3d59',
+                            'lineHeight': '40px'
+                        })
+                    ], width=2),
+                    
+                    # Columna central: Barra de progreso con umbrales
+                    dbc.Col([
+                        html.Div([
+                            # Barra (única para media, segmentada para suma)
+                            html.Div(
+                                barra_contenido,
+                                style={
+                                    'height': '40px',
+                                    'backgroundColor': '#e9ecef',
+                                    'borderRadius': '6px',
+                                    'display': 'flex' if not es_media else 'block',
+                                    'position': 'relative'
+                                }
+                            ),
+                            # Línea del mínimo (roja)
+                            html.Div(style={
+                                'position': 'absolute',
+                                'left': f'{pos_min}%',
+                                'top': '0',
+                                'width': '2px',
+                                'height': '40px',
+                                'backgroundColor': '#dc3545',
+                                'zIndex': '5'
+                            }),
+                            # Línea del máximo (roja)
+                            html.Div(style={
+                                'position': 'absolute',
+                                'right': '0',
+                                'top': '0',
+                                'width': '2px',
+                                'height': '40px',
+                                'backgroundColor': '#dc3545',
+                                'zIndex': '5'
+                            }),
+                            # Label del mínimo debajo
+                            html.Div(f"Mín: {config['min']}%", style={
+                                'position': 'absolute',
+                                'left': f'{pos_min}%',
+                                'top': '48px',
+                                'transform': 'translateX(-50%)',
+                                'fontSize': '9px',
+                                'fontWeight': '600',
+                                'color': '#dc3545',
+                                'whiteSpace': 'nowrap'
+                            }),
+                            # Label del máximo debajo
+                            html.Div(f"Máx: {config['max']}%", style={
+                                'position': 'absolute',
+                                'right': '0',
+                                'top': '48px',
+                                'transform': 'translateX(50%)',
+                                'fontSize': '9px',
+                                'fontWeight': '600',
+                                'color': '#dc3545',
+                                'whiteSpace': 'nowrap'
+                            })
+                        ], style={'position': 'relative', 'paddingBottom': '25px'})
+                    ], width=8),
+                    
+                    # Columna derecha: Acumulado total
+                    dbc.Col([
+                        html.Div(f"{acumulado_total:.0f}%", style={
+                            'fontWeight': '700',
+                            'fontSize': '16px',
+                            'color': color_acumulado,
+                            'lineHeight': '40px',
+                            'textAlign': 'right'
+                        })
+                    ], width=2)
+                ])
+            ], style={'marginBottom': '35px'})
+            
+            barras_html.append(barra_metrica)
+            print(f"  ✓ Barra creada para {config['label']} - Acumulado: {acumulado_total:.0f}%")
+            
+        except Exception as e:
+            print(f"  ⚠️ Error procesando {metric_id}: {e}")
+            continue
+    
+    print(f"✅ {len(barras_html)} barras generadas para el jugador")
+    
+    # Retornar todas las barras
+    if barras_html:
+        return html.Div(barras_html)
+    else:
+        return html.Div("No hay datos suficientes para mostrar el seguimiento de carga", 
+                       className="text-muted text-center p-3")
+
+
+# Callback para cambiar métrica y actualizar gráfico del jugador
+@callback(
+    Output("sj-bar-chart", "figure"),
+    Output({'type': 'sj-metric-btn', 'index': ALL}, "style"),
+    Input({'type': 'sj-metric-btn', 'index': ALL}, "n_clicks"),
+    State("sj-jugador-cache", "data"),
+    prevent_initial_call=False
+)
+def actualizar_grafico_jugador(n_clicks_list, jugador_cache):
+    """Actualiza el gráfico cuando se selecciona una métrica (USANDO generar_grafico_optimizado_precargado)"""
+    
+    # Estilos base para los botones
+    base_style = {
+        'backgroundColor': '#f8f9fa',
+        'color': '#1e3d59',
+        'border': '1px solid #e0e0e0',
+        'borderRadius': '8px',
+        'padding': '12px 16px',
+        'fontWeight': '500',
+        'fontSize': '13px',
+        'marginBottom': '10px',
+        'transition': 'all 0.2s ease',
+        'width': '100%',
+        'textAlign': 'left'
+    }
+    
+    active_style = {
+        **base_style,
+        'backgroundColor': '#1e3d59',
+        'color': 'white',
+        'fontWeight': '600'
+    }
+    
+    # Si no hay datos, retornar figura vacía con primer botón activo
+    if not jugador_cache or not jugador_cache.get('athlete_id'):
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Cargando datos del jugador...",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=14, color="#6c757d")
+        )
+        styles = [active_style] + [base_style] * 5
+        return fig, styles
+    
+    ctx = callback_context
+    
+    # Determinar qué métrica se seleccionó
+    metrica_seleccionada = 'total_distance'  # Por defecto
+    if ctx.triggered and ctx.triggered[0]['prop_id'] != '.':
+        triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        if triggered_id:
+            import json
+            button_id = json.loads(triggered_id)
+            metrica_seleccionada = button_id['index']
+    
+    # Obtener datos del cache (INCLUIR GRÁFICOS PRE-GENERADOS)
+    graficos = jugador_cache.get('graficos', {})
+    maximos = jugador_cache.get('maximos', {})
+    datos_por_metrica = jugador_cache.get('datos_por_metrica', {})
+    nombre_jugador = jugador_cache.get('nombre', '')
+    
+    # USAR LAS MISMAS MÉTRICAS QUE MICROCICLO EQUIPO
+    metricas_info = [
+        {'id': 'total_distance', 'label': 'Distancia Total (m)', 'icon': 'fa-route', 'unidad': 'm'},
+        {'id': 'distancia_21_kmh', 'label': 'HSR +21 km/h (m)', 'icon': 'fa-running', 'unidad': 'm'},
+        {'id': 'distancia_24_kmh', 'label': 'VHSR +24 km/h (m)', 'icon': 'fa-bolt', 'unidad': 'm'},
+        {'id': 'acc_dec_total', 'label': 'Aceleraciones', 'icon': 'fa-chart-line', 'unidad': 'count'},
+        {'id': 'ritmo_medio', 'label': 'Player Load', 'icon': 'fa-weight-hanging', 'unidad': 'AU'}
+    ]
+    
+    # OBTENER GRÁFICO PRE-GENERADO DEL CACHE (INSTANTÁNEO - como Microciclo Equipo)
+    if metrica_seleccionada in graficos:
+        fig = graficos[metrica_seleccionada]
+        print(f"⚡ Mostrando {metrica_seleccionada} (desde cache)")
+    else:
+        # Fallback si no está en cache
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Gráfico no disponible en cache",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=14, color="#6c757d")
+        )
+        print(f"⚠️ Gráfico {metrica_seleccionada} no encontrado en cache")
+    
+    # Actualizar estilos de botones (ya definidos al inicio)
+    styles = []
+    for m in metricas_info:
+        if m['id'] == metrica_seleccionada:
+            styles.append(active_style)
+        else:
+            styles.append(base_style)
+    
+    return fig, styles
 
 # Cache para datos de atletas (evita consultas repetidas)
 @lru_cache(maxsize=1)
 def get_cached_athletes():
     """Obtiene y cachea la lista de atletas"""
     return get_all_athletes()
+
+# ============================================
+# CALLBACKS PARA CARGA JUGADORES (Análisis de máximos en MD)
+# ============================================
 
 # Función auxiliar para generar el gráfico (optimizada)
 def generar_grafico_semana_jugadores(start_date, end_date, metric, atleta_ids_filtro, excluir_part_rehab=True):
