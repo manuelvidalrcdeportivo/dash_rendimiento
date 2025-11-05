@@ -439,13 +439,15 @@ def create_standings_full_table(standings_data):
         return html.Div()
     
     return html.Div([
-        # Filtro de últimos 5 partidos
+        # Filtro de clasificación
         html.Div([
             dbc.RadioItems(
                 id='standings-filter-radio',
                 options=[
                     {'label': ' Clasificación General', 'value': 'general'},
-                    {'label': ' Últimos 5 Partidos', 'value': 'last5'}
+                    {'label': ' Últimos 5 Partidos', 'value': 'last5'},
+                    {'label': ' Local', 'value': 'home'},
+                    {'label': ' Visitante', 'value': 'away'}
                 ],
                 value='general',
                 inline=True,
@@ -470,6 +472,28 @@ def create_full_standings_rows(df, filter_type='general'):
             html.Div("Equipo", style={'flex': '1', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d', 'marginLeft': '34px'}),
             html.Div("Forma (Ú5)", style={'width': '150px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'}),
             html.Div("Pts Ú5", style={'width': '60px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'})
+        ], style={
+            'display': 'flex',
+            'alignItems': 'center',
+            'padding': '10px 12px',
+            'backgroundColor': '#f8f9fa',
+            'borderRadius': '6px',
+            'marginBottom': '10px'
+        })
+    elif filter_type in ['home', 'away']:
+        # Vista para Local/Visitante
+        label_suffix = " (L)" if filter_type == 'home' else " (V)"
+        header = html.Div([
+            html.Div("Pos", style={'width': '50px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'}),
+            html.Div("Equipo", style={'flex': '1', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d', 'marginLeft': '34px'}),
+            html.Div(f"PJ{label_suffix}", style={'width': '40px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'}),
+            html.Div(f"PG{label_suffix}", style={'width': '40px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'}),
+            html.Div(f"PE{label_suffix}", style={'width': '40px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'}),
+            html.Div(f"PP{label_suffix}", style={'width': '40px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'}),
+            html.Div(f"GF{label_suffix}", style={'width': '40px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'}),
+            html.Div(f"GC{label_suffix}", style={'width': '40px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'}),
+            html.Div(f"DG{label_suffix}", style={'width': '50px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'}),
+            html.Div(f"Pts{label_suffix}", style={'width': '50px', 'textAlign': 'center', 'fontSize': '12px', 'fontWeight': '600', 'color': '#6c757d'})
         ], style={
             'display': 'flex',
             'alignItems': 'center',
@@ -561,6 +585,40 @@ def create_full_standings_rows(df, filter_type='general'):
                 html.Div(forma_icons, style={'width': '150px', 'display': 'flex', 'justifyContent': 'center'}),
                 # Puntos Ú5
                 html.Div(str(int(row['last_5_points'])), style={'width': '60px', 'textAlign': 'center', 'fontSize': '16px', 'fontWeight': '700', 'color': '#1e3d59'})
+            ], style={
+                'display': 'flex',
+                'alignItems': 'center',
+                'padding': '12px',
+                'borderBottom': '1px solid #f0f0f0',
+                'backgroundColor': bg_color,
+                'fontWeight': '600' if is_depor else '400',
+                'borderRadius': '6px',
+                'borderLeft': border_left,
+                'marginBottom': '2px'
+            }))
+        elif filter_type in ['home', 'away']:
+            # Vista Local/Visitante: todas las estadísticas de home o away
+            suffix = '_home' if filter_type == 'home' else '_away'
+            goal_diff = row[f'goal_difference{suffix}']
+            
+            rows.append(html.Div([
+                # Posición
+                html.Div(str(position), style={'width': '50px', 'textAlign': 'center', 'fontSize': '14px', 'fontWeight': '700', 'color': '#1e3d59'}),
+                # Escudo y equipo
+                html.Div([
+                    html.Img(src=get_escudo_path(row['team_name']), style={'height': '24px', 'width': '24px', 'objectFit': 'contain', 'marginRight': '10px'}),
+                    html.Span(row['team_name'], style={'fontSize': '14px', 'color': '#1e3d59'})
+                ], style={'flex': '1', 'display': 'flex', 'alignItems': 'center'}),
+                html.Div(str(int(row[f'matches_played{suffix}'])), style={'width': '40px', 'textAlign': 'center', 'fontSize': '13px', 'color': '#6c757d'}),
+                html.Div(str(int(row[f'matches_won{suffix}'])), style={'width': '40px', 'textAlign': 'center', 'fontSize': '13px', 'color': '#28a745'}),
+                html.Div(str(int(row[f'matches_drawn{suffix}'])), style={'width': '40px', 'textAlign': 'center', 'fontSize': '13px', 'color': '#ffc107'}),
+                html.Div(str(int(row[f'matches_lost{suffix}'])), style={'width': '40px', 'textAlign': 'center', 'fontSize': '13px', 'color': '#dc3545'}),
+                html.Div(str(int(row[f'goals_for{suffix}'])), style={'width': '40px', 'textAlign': 'center', 'fontSize': '13px', 'color': '#6c757d'}),
+                html.Div(str(int(row[f'goals_against{suffix}'])), style={'width': '40px', 'textAlign': 'center', 'fontSize': '13px', 'color': '#6c757d'}),
+                html.Div(f"+{int(goal_diff)}" if goal_diff > 0 else str(int(goal_diff)), 
+                         style={'width': '50px', 'textAlign': 'center', 'fontSize': '13px', 'fontWeight': '600', 
+                                'color': '#28a745' if goal_diff > 0 else '#dc3545' if goal_diff < 0 else '#6c757d'}),
+                html.Div(str(int(row[f'points{suffix}'])), style={'width': '50px', 'textAlign': 'center', 'fontSize': '15px', 'fontWeight': '700', 'color': '#1e3d59'})
             ], style={
                 'display': 'flex',
                 'alignItems': 'center',
@@ -861,7 +919,7 @@ def toggle_standings_modal(open_clicks, close_clicks, is_open):
     prevent_initial_call=True
 )
 def filter_standings_table(filter_value, is_open):
-    """Filtra la tabla según clasificación general o últimos 5 partidos"""
+    """Filtra la tabla según clasificación general, últimos 5 partidos, local o visitante"""
     from utils.db_manager import get_league_standings
     
     if not is_open:
@@ -877,6 +935,14 @@ def filter_standings_table(filter_value, is_open):
     if filter_value == 'last5':
         # Ordenar por puntos de últimos 5 partidos
         df = df.sort_values('last_5_points', ascending=False).reset_index(drop=True)
+        df['position'] = range(1, len(df) + 1)
+    elif filter_value == 'home':
+        # Ordenar por puntos como local
+        df = df.sort_values(['points_home', 'goal_difference_home', 'goals_for_home'], ascending=[False, False, False]).reset_index(drop=True)
+        df['position'] = range(1, len(df) + 1)
+    elif filter_value == 'away':
+        # Ordenar por puntos como visitante
+        df = df.sort_values(['points_away', 'goal_difference_away', 'goals_for_away'], ascending=[False, False, False]).reset_index(drop=True)
         df['position'] = range(1, len(df) + 1)
     
     return create_full_standings_rows(df, filter_value)
