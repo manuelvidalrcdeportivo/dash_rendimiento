@@ -6,9 +6,10 @@ Evolutivo Temporada (Competición): Visualización tipo ranking por métrica.
 - Colores: 1-6 verde, 7-16 amarillo, 17-22 rojo. Celdas vacías gris claro.
 """
 
-from dash import html, dcc, callback, Input, Output
+from dash import html, dcc, callback, Input, Output, State
+import dash_bootstrap_components as dbc
 from utils.layouts import standard_page
-from utils.db_manager import get_db_connection, get_laliga_db_connection, get_indicadores_rendimiento_laliga, get_available_teams_laliga, get_all_teams_rankings_laliga, get_rankings_compuestos_laliga, get_metric_info_from_name, get_metric_evolution_by_matchday, get_match_opponents_by_matchday
+from utils.db_manager import get_db_connection, get_laliga_db_connection, get_indicadores_rendimiento_laliga, get_available_teams_laliga, get_all_teams_rankings_laliga, get_rankings_compuestos_laliga, get_metric_info_from_name, get_metric_evolution_by_matchday, get_match_opponents_by_matchday, get_match_results_by_matchday
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -192,11 +193,9 @@ def create_scatter_plot_rendimiento(metric_x, metric_y, label_x, label_y, invert
                 hoverinfo='skip'
             ))
     
-    # Tamaño de las imágenes en unidades de datos (usar el rango menor para mantener proporción)
-    # Porcentaje ajustado para que sean similares a los de Estilo
-    min_range = min(x_range, y_range)
-    img_size_x = min_range * 1.2
-    img_size_y = min_range * 1.2
+    # Tamaño de las imágenes en unidades de datos (igual que en Diagrama de Estilo)
+    img_size_x = x_range * 0.10
+    img_size_y = y_range * 0.10
     
     # Añadir escudos como imágenes
     images = []
@@ -339,6 +338,9 @@ METRIC_NAME_MAPPING = {
     "Distancia Recorrida > 21 km/h (m.)": "Distancia > 21 km/h",
     "Distancia High Sprint > 24 km/h (m.)": "Distancia > 24 km/h (m.)",
     "% Duelos Aéreos Ganados": "% Duelos Aéreos",
+    "Diferencial Distancia Total Recorrida (m.)": "Dif. Distancia Total",
+    "Diferencial Distancia > 21 km/h (m.)": "Dif. Distancia > 21 km/h",
+    "Diferencial Distancia High Sprint > 24 km/h (m.)": "Dif. Distancia > 24 km/h",
     
     # Balón Parado
     "Goles a favor Balón Parado sin Penaltis (Nº)": "Goles B.P. F (N.P)",
@@ -366,6 +368,9 @@ GROUPS_ORIGINAL = [
         "Distancia Recorrida > 21 km/h (m.)",
         "Distancia High Sprint > 24 km/h (m.)",
         "% Duelos Aéreos Ganados",
+        "Diferencial Distancia Total Recorrida (m.)",
+        "Diferencial Distancia > 21 km/h (m.)",
+        "Diferencial Distancia High Sprint > 24 km/h (m.)",
     ]),
     ("Balón Parado", [
          "Goles a favor Balón Parado sin Penaltis (Nº)",
@@ -395,6 +400,9 @@ GROUPS = [
         "Distancia > 21 km/h",
         "Distancia > 24 km/h (m.)",
         "% Duelos Aéreos",
+        "Dif. Distancia Total",
+        "Dif. Distancia > 21 km/h",
+        "Dif. Distancia > 24 km/h",
     ]),
     ("Balón Parado", [
         "Goles B.P. F (N.P)",
@@ -689,7 +697,7 @@ def build_ranking_heatmap(df: pd.DataFrame, selected_view='expanded', collapsed_
 
     # Layout general con escudo del RC Deportivo
     fig.update_layout(
-        height=1000,  # Aumentar altura para acomodar etiquetas inclinadas
+        height=650,  # Reducido para mejor visualización
         margin=dict(l=50, r=40, t=60, b=200),  # Aumentar margen superior para el escudo
         plot_bgcolor='white',
         paper_bgcolor='white',
@@ -888,22 +896,73 @@ def legend_block():
         html.Span([
             html.Span(style={**box_style, 'background': '#e74c3c'}),
             html.Span('17–22', style=text_style)
-        ], style={'display': 'inline-flex', 'alignItems': 'center'})
+        ], style={'display': 'inline-flex', 'alignItems': 'center', 'marginRight': '12px'}),
+        # Botón de interrogación
+        html.Span(
+            "?",
+            id='info-tooltip-trigger',
+            style={
+                'display': 'inline-flex',
+                'alignItems': 'center',
+                'justifyContent': 'center',
+                'width': '24px',
+                'height': '24px',
+                'borderRadius': '50%',
+                'backgroundColor': 'white',
+                'color': '#1e3d59',
+                'border': '2px solid #1e3d59',
+                'fontWeight': 'bold',
+                'fontSize': '14px',
+                'cursor': 'pointer',
+                'fontFamily': 'Montserrat, sans-serif'
+            }
+        )
     ], style={'display': 'flex', 'alignItems': 'center', 'gap': '0px', 'whiteSpace': 'nowrap'})
 
 def description_block():
+    """Modal con información del diagrama"""
+    import dash_bootstrap_components as dbc
     return html.Div([
-        html.P(
-            [
-                html.Span('Cada columna representa una métrica; las filas muestran el ranking que ocupa el equipo en la competición (1 arriba → 22 abajo).'),
-                html.Br(),
-                html.Span('El color refleja la banda de rendimiento por métrica y por grupo.'),
-                html.Br(),
-                html.Span('Haz clic en un bloque para agrupar los rankings de los indicadores de ese bloque y ver la clasificación general.'),
-            ],
-            className='text-muted', style={'fontStyle': 'italic', 'lineHeight': '1.6', 'margin': '0'}
-        )
-    ], style={'marginTop': '0px', 'marginBottom': '0px', 'paddingBottom': '0px'})
+        dbc.Modal([
+            dbc.ModalHeader(dbc.ModalTitle("Cómo interpretar el diagrama"), close_button=True),
+            dbc.ModalBody([
+                html.P("Cada columna representa una métrica; las filas muestran el ranking que ocupa el equipo en la competición (1 arriba → 22 abajo)."),
+                html.P("El color refleja la banda de rendimiento por métrica y por grupo."),
+                html.P("Haz clic en un bloque para agrupar los rankings de los indicadores de ese bloque y ver la clasificación general.")
+            ])
+        ], id='info-modal', is_open=False, centered=True)
+    ])
+
+
+def results_legend():
+    """Leyenda de colores para resultados de partidos"""
+    box_style = {
+        'display': 'inline-block',
+        'width': '16px',
+        'height': '16px',
+        'marginRight': '6px',
+        'borderRadius': '3px'
+    }
+    text_style = {
+        'fontSize': '12px',
+        'color': '#6c757d',
+        'fontFamily': 'Montserrat, sans-serif'
+    }
+    
+    return html.Div([
+        html.Span([
+            html.Span(style={**box_style, 'background': '#28a745'}),
+            html.Span('Victoria', style=text_style)
+        ], style={'display': 'inline-flex', 'alignItems': 'center', 'marginRight': '12px'}),
+        html.Span([
+            html.Span(style={**box_style, 'background': '#ffc107'}),
+            html.Span('Empate', style=text_style)
+        ], style={'display': 'inline-flex', 'alignItems': 'center', 'marginRight': '12px'}),
+        html.Span([
+            html.Span(style={**box_style, 'background': '#dc3545'}),
+            html.Span('Derrota', style=text_style)
+        ], style={'display': 'inline-flex', 'alignItems': 'center'})
+    ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '12px', 'marginTop': '8px'})
 
 
 def _group_tied_teams(rankings_dict):
@@ -2156,6 +2215,9 @@ def update_metric_evolution(selected_metric, team_data):
     # Obtener rivales por jornada
     opponents = get_match_opponents_by_matchday(team_name, season_id)
     
+    # Obtener resultados por jornada
+    results = get_match_results_by_matchday(team_name, season_id)
+    
     if df_evolution.empty:
         return html.Div(
             f"No hay datos disponibles para {METRIC_NAME_MAPPING.get(selected_metric, selected_metric)}",
@@ -2172,12 +2234,37 @@ def update_metric_evolution(selected_metric, team_data):
     # Crear el gráfico
     fig = go.Figure()
     
-    # Agregar barras con información del rival en hover
+    # Preparar colores y hover texts según resultado
+    bar_colors = []
     hover_texts = []
+    
     for _, row in df_full.iterrows():
         matchday = int(row['match_day_number'])
         opponent = opponents.get(matchday, '')
-        if pd.notna(row['metric_value']) and opponent:
+        result_data = results.get(matchday, {})
+        resultado = result_data.get('resultado', '')
+        goles_favor = result_data.get('goles_favor', 0)
+        goles_contra = result_data.get('goles_contra', 0)
+        
+        # Asignar color según resultado
+        if resultado == 'Victoria':
+            bar_colors.append('#28a745')  # Verde
+        elif resultado == 'Empate':
+            bar_colors.append('#ffc107')  # Amarillo
+        elif resultado == 'Derrota':
+            bar_colors.append('#dc3545')  # Rojo
+        else:
+            bar_colors.append('#6c757d')  # Gris (sin datos)
+        
+        # Crear hover text con información completa
+        if pd.notna(row['metric_value']) and opponent and resultado:
+            hover_texts.append(
+                f"<b>Jornada {matchday}</b><br>"
+                f"vs {opponent}<br>"
+                f"Resultado: {goles_favor}-{goles_contra} ({resultado})<br>"
+                f"Valor: {row['metric_value']:.2f}"
+            )
+        elif pd.notna(row['metric_value']) and opponent:
             hover_texts.append(f"<b>Jornada {matchday}</b><br>vs {opponent}<br>Valor: {row['metric_value']:.2f}")
         elif pd.notna(row['metric_value']):
             hover_texts.append(f"<b>Jornada {matchday}</b><br>Valor: {row['metric_value']:.2f}")
@@ -2189,7 +2276,7 @@ def update_metric_evolution(selected_metric, team_data):
         y=df_full['metric_value'],
         name='Valor',
         marker=dict(
-            color='#1e3d59',
+            color=bar_colors,
             opacity=0.8
         ),
         hovertemplate='%{customdata}<extra></extra>',
@@ -2258,24 +2345,41 @@ def update_metric_evolution(selected_metric, team_data):
         paper_bgcolor='rgba(0,0,0,0)',
         font=dict(family='Montserrat, sans-serif'),
         hovermode='x unified',
-        showlegend=True,
-        legend=dict(
-            orientation='h',
-            yanchor='bottom',
-            y=1.02,
-            xanchor='right',
-            x=1,
-            font=dict(family='Montserrat, sans-serif')
+        hoverlabel=dict(
+            bgcolor='white',
+            font_size=12,
+            font_family='Montserrat, sans-serif',
+            font_color='#1e3d59',
+            bordercolor='#1e3d59'
         ),
+        showlegend=False,
         margin=dict(l=60, r=20, t=80, b=60),
         height=400
     )
     
-    return dcc.Graph(
-        figure=fig,
-        config={'displayModeBar': False},
-        style={'backgroundColor': 'transparent'}
-    )
+    # Retornar con leyenda de resultados arriba del gráfico
+    return html.Div([
+        results_legend(),
+        dcc.Graph(
+            figure=fig,
+            config={'displayModeBar': False},
+            style={'backgroundColor': 'transparent'}
+        )
+    ])
+
+
+# Callback para abrir/cerrar el modal de información
+@callback(
+    Output('info-modal', 'is_open'),
+    Input('info-tooltip-trigger', 'n_clicks'),
+    State('info-modal', 'is_open'),
+    prevent_initial_call=True
+)
+def toggle_info_modal(n_clicks, is_open):
+    """Abre/cierra el modal de información al hacer click en el botón"""
+    if n_clicks:
+        return not is_open
+    return is_open
 
 
 # Layout dinámico: se ejecuta cada vez que se accede a la página

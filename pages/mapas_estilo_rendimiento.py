@@ -167,8 +167,8 @@ def create_scatter_plot(metric_x, metric_y, label_x, label_y, invert_y=False, cu
     # Tamaño de las imágenes (ya calculamos x_range e y_range arriba)
     
     # Tamaño de las imágenes en unidades de datos (proporcional al rango)
-    img_size_x = x_range * 0.14  # 4% del rango X
-    img_size_y = y_range * 0.14  # 4% del rango Y
+    img_size_x = x_range * 0.19  # 4% del rango X
+    img_size_y = y_range * 0.19  # 4% del rango Y
     
     # Añadir escudos como imágenes
     images = []

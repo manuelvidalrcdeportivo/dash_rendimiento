@@ -896,6 +896,57 @@ def get_match_opponents_by_matchday(team_name, season_id=1):
         return {}
 
 
+def get_match_results_by_matchday(team_name, season_id=1):
+    """
+    Obtiene los resultados (goles y resultado) para cada jornada desde match_context_analysis.
+    
+    Args:
+        team_name (str): Nombre del equipo en laliga_teams (ej: "RC Deportivo")
+        season_id (int): ID de la temporada
+    
+    Returns:
+        dict: {match_day_number: {'goles_favor': int, 'goles_contra': int, 'resultado': str}}
+              donde resultado puede ser 'Victoria', 'Empate', o 'Derrota'
+    """
+    try:
+        engine = get_laliga_db_connection()
+        if engine is None:
+            return {}
+        
+        query = """
+        SELECT 
+            match_day_number,
+            goles_favor,
+            goles_contra,
+            resultado
+        FROM match_context_analysis
+        WHERE depor_team_name_teams = %s
+        AND season_id = %s
+        ORDER BY match_day_number
+        """
+        
+        df_results = pd.read_sql(query, engine, params=(team_name, season_id))
+        
+        if df_results.empty:
+            return {}
+        
+        # Crear diccionario con resultados por jornada
+        results = {}
+        for _, row in df_results.iterrows():
+            matchday = int(row['match_day_number'])
+            results[matchday] = {
+                'goles_favor': int(row['goles_favor']) if pd.notna(row['goles_favor']) else 0,
+                'goles_contra': int(row['goles_contra']) if pd.notna(row['goles_contra']) else 0,
+                'resultado': row['resultado'] if pd.notna(row['resultado']) else 'Sin datos'
+            }
+        
+        return results
+        
+    except Exception as e:
+        print(f"Error obteniendo resultados por jornada: {e}")
+        return {}
+
+
 def get_metric_evolution_by_matchday(team_name, metric_id, metric_category, season_id=1):
     """
     Obtiene la evolución de una métrica específica para un equipo a lo largo de las jornadas.

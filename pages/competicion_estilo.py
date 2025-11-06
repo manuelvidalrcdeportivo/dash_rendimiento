@@ -6,8 +6,8 @@ Estructura: ESTILO GLOBAL con 3 sub-rankings (Identidad General, Ofensiva, Defen
 from dash import html, dcc, callback, Input, Output, State, ALL, clientside_callback, ClientsideFunction
 from utils.db_manager import (get_indicadores_rendimiento_laliga, get_rankings_compuestos_laliga, 
                                get_all_teams_rankings_laliga, get_metric_evolution_by_matchday, 
-                               get_match_opponents_by_matchday, get_metric_info_from_name,
-                               get_laliga_db_connection)
+                               get_match_opponents_by_matchday, get_match_results_by_matchday, 
+                               get_metric_info_from_name, get_laliga_db_connection)
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -215,8 +215,8 @@ def create_scatter_plot_estilo(metric_x, metric_y, label_x, label_y, invert_y=Fa
             ))
     
     # Tamaño de las imágenes en unidades de datos (aumentado)
-    img_size_x = x_range * 0.18
-    img_size_y = y_range * 0.18
+    img_size_x = x_range * 0.22
+    img_size_y = y_range * 0.22
     
     # Añadir escudos como imágenes
     images = []
@@ -319,7 +319,7 @@ def create_scatter_plot_estilo(metric_x, metric_y, label_x, label_y, invert_y=Fa
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         hovermode='closest',
-        height=750,  # Aumentado de 600 a 750
+        height=650,  # Reducido para mejor visualización
         margin=dict(l=80, r=120, t=40, b=80),  # Más margen derecha y abajo para etiquetas
         font=dict(family='Montserrat'),
         showlegend=False
@@ -328,7 +328,7 @@ def create_scatter_plot_estilo(metric_x, metric_y, label_x, label_y, invert_y=Fa
     return dcc.Graph(
         figure=fig,
         config={'displayModeBar': False},
-        style={'height': '750px'}  # Aumentado también aquí
+        style={'height': '650px'}  # Ajustado para coincidir con el layout
     )
 
 
@@ -398,7 +398,8 @@ def get_estilo_content():
     from pages.competicion_evolutivo_temporada import (
         team_selector_premium, 
         legend_block,
-        description_block
+        description_block,
+        results_legend
     )
     
     return html.Div([
@@ -962,6 +963,9 @@ def handle_block_clicks_estilo(clicks_list, current_state, selected_team):
 )
 def update_metric_evolution_estilo(selected_metric, team_data):
     """Actualiza el gráfico de evolución de una métrica de estilo"""
+    # Importar results_legend desde competicion_evolutivo_temporada
+    from pages.competicion_evolutivo_temporada import results_legend
+    
     if not selected_metric or not team_data:
         return html.Div()
     
@@ -991,6 +995,9 @@ def update_metric_evolution_estilo(selected_metric, team_data):
     # Obtener rivales por jornada
     opponents = get_match_opponents_by_matchday(team_name, season_id)
     
+    # Obtener resultados por jornada
+    results = get_match_results_by_matchday(team_name, season_id)
+    
     if df_evolution.empty:
         return html.Div(
             f"No hay datos disponibles para {METRIC_NAME_MAPPING_ESTILO.get(selected_metric, selected_metric)}",
@@ -1007,12 +1014,37 @@ def update_metric_evolution_estilo(selected_metric, team_data):
     # Crear el gráfico
     fig = go.Figure()
     
-    # Agregar barras con información del rival en hover
+    # Preparar colores y hover texts según resultado
+    bar_colors = []
     hover_texts = []
+    
     for _, row in df_full.iterrows():
         matchday = int(row['match_day_number'])
         opponent = opponents.get(matchday, '')
-        if pd.notna(row['metric_value']) and opponent:
+        result_data = results.get(matchday, {})
+        resultado = result_data.get('resultado', '')
+        goles_favor = result_data.get('goles_favor', 0)
+        goles_contra = result_data.get('goles_contra', 0)
+        
+        # Asignar color según resultado
+        if resultado == 'Victoria':
+            bar_colors.append('#28a745')  # Verde
+        elif resultado == 'Empate':
+            bar_colors.append('#ffc107')  # Amarillo
+        elif resultado == 'Derrota':
+            bar_colors.append('#dc3545')  # Rojo
+        else:
+            bar_colors.append('#6c757d')  # Gris (sin datos)
+        
+        # Crear hover text con información completa
+        if pd.notna(row['metric_value']) and opponent and resultado:
+            hover_texts.append(
+                f"<b>Jornada {matchday}</b><br>"
+                f"vs {opponent}<br>"
+                f"Resultado: {goles_favor}-{goles_contra} ({resultado})<br>"
+                f"Valor: {row['metric_value']:.2f}"
+            )
+        elif pd.notna(row['metric_value']) and opponent:
             hover_texts.append(f"<b>Jornada {matchday}</b><br>vs {opponent}<br>Valor: {row['metric_value']:.2f}")
         elif pd.notna(row['metric_value']):
             hover_texts.append(f"<b>Jornada {matchday}</b><br>Valor: {row['metric_value']:.2f}")
@@ -1024,7 +1056,7 @@ def update_metric_evolution_estilo(selected_metric, team_data):
         y=df_full['metric_value'],
         name='Valor',
         marker=dict(
-            color='#1e3d59',
+            color=bar_colors,
             opacity=0.8
         ),
         hovertemplate='%{customdata}<extra></extra>',
@@ -1049,10 +1081,16 @@ def update_metric_evolution_estilo(selected_metric, team_data):
         yaxis_title=metric_display_name,
         font=dict(family="Montserrat", size=12),
         hovermode='x unified',
+        hoverlabel=dict(
+            bgcolor='white',
+            font_size=12,
+            font_family='Montserrat, sans-serif',
+            font_color='#1e3d59',
+            bordercolor='#1e3d59'
+        ),
         plot_bgcolor='white',
         height=400,
-        showlegend=True,
-        legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)')
+        showlegend=False
     )
     
     fig.update_xaxes(
@@ -1063,7 +1101,11 @@ def update_metric_evolution_estilo(selected_metric, team_data):
     )
     fig.update_yaxes(showgrid=True, gridcolor='rgba(0,0,0,0.1)')
     
-    return dcc.Graph(figure=fig, config={'displayModeBar': False})
+    # Retornar con leyenda de resultados arriba del gráfico
+    return html.Div([
+        results_legend(),
+        dcc.Graph(figure=fig, config={'displayModeBar': False})
+    ])
 
 
 # Callback clientside para descargar el heatmap

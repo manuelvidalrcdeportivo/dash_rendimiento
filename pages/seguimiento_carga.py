@@ -42,14 +42,15 @@ def detectar_tipo_microciclo(dias_presentes):
     
     Tipos:
     - EXTENDIDO: Tiene MD-5 (5 entrenamientos: MD-5, MD-4, MD-3, MD-2, MD-1)
-    - REDUCIDO: NO tiene MD-5 ni MD-4 (3 entrenamientos: MD-3, MD-2, MD-1)
+    - SUPERRECORTADO: NO tiene MD-3 ni MD-4 (2 entrenamientos: MD-2, MD-1)
+    - REDUCIDO: NO tiene MD-5 ni MD-4 pero tiene MD-3 (3 entrenamientos: MD-3, MD-2, MD-1)
     - ESTÁNDAR: Tiene MD-4 pero NO MD-5 (4 entrenamientos: MD-4, MD-3, MD-2, MD-1)
     
     Args:
         dias_presentes: Lista de tags de días (ej: ['MD+1', 'MD-4', 'MD-3', 'MD-2', 'MD-1', 'MD'])
     
     Returns:
-        str: 'extendido', 'reducido', o 'estandar'
+        str: 'extendido', 'superrecortado', 'reducido', o 'estandar'
     """
     if not dias_presentes:
         return 'estandar'
@@ -57,7 +58,10 @@ def detectar_tipo_microciclo(dias_presentes):
     # Extendido
     if 'MD-5' in dias_presentes or 'MD-6' in dias_presentes:
         return 'extendido'
-    # Reducido
+    # Superrecortado (solo MD-2 y MD-1, sin MD-3)
+    elif 'MD-3' not in dias_presentes and 'MD-4' not in dias_presentes:
+        return 'superrecortado'
+    # Reducido (tiene MD-3 pero no MD-4)
     elif 'MD-4' not in dias_presentes:
         return 'reducido'
     # Estándar
@@ -73,8 +77,8 @@ def get_metricas_disponibles():
         {'id': 'total_distance', 'label': 'Distancia Total (m)', 'label_corto': 'Distancia Total', 'icon': 'fa-route'},
         {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h (m)', 'label_corto': 'Dist. +21 km/h', 'icon': 'fa-running'},
         {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h (m)', 'label_corto': 'Dist. +24 km/h', 'icon': 'fa-bolt'},
-        {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'label_corto': 'Acel/Decel +3', 'icon': 'fa-tachometer-alt'},
-        {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min)', 'label_corto': 'Ritmo Medio', 'icon': 'fa-stopwatch'}
+        {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (m/s²)', 'label_corto': 'Acel/Decel +3 (m/s²)', 'icon': 'fa-tachometer-alt'},
+        {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'label_corto': 'Ritmo Medio (m/min.)', 'icon': 'fa-stopwatch'}
     ]
 
 def get_metricas_config_por_tipo(tipo_microciclo):
@@ -82,7 +86,7 @@ def get_metricas_config_por_tipo(tipo_microciclo):
     Retorna la configuración de métricas con umbrales según el tipo de microciclo.
     
     Args:
-        tipo_microciclo: 'estandar', 'extendido', o 'reducido'
+        tipo_microciclo: 'estandar', 'extendido', 'reducido', o 'superrecortado'
     
     Returns:
         Lista de diccionarios con configuración de métricas
@@ -92,24 +96,32 @@ def get_metricas_config_por_tipo(tipo_microciclo):
             {'id': 'total_distance', 'label': 'Distancia Total', 'min': 200, 'max': 280, 'tipo': 'suma'},
             {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 100, 'max': 190, 'tipo': 'suma'},
             {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 90, 'max': 170, 'tipo': 'suma'},
-            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'min': 250, 'max': 380, 'tipo': 'suma'},
-            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 60, 'max': 80, 'tipo': 'media'}
+            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (m/s²)', 'min': 250, 'max': 380, 'tipo': 'suma'},
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 60, 'max': 80, 'tipo': 'media'}
+        ]
+    elif tipo_microciclo == 'superrecortado':
+        return [
+            {'id': 'total_distance', 'label': 'Distancia Total', 'min': 60, 'max': 110, 'tipo': 'suma'},
+            {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 20, 'max': 60, 'tipo': 'suma'},
+            {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 20, 'max': 40, 'tipo': 'suma'},
+            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (m/s²)', 'min': 65, 'max': 120, 'tipo': 'suma'},
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 40, 'max': 70, 'tipo': 'media'}
         ]
     elif tipo_microciclo == 'reducido':
         return [
             {'id': 'total_distance', 'label': 'Distancia Total', 'min': 125, 'max': 170, 'tipo': 'suma'},
             {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 70, 'max': 130, 'tipo': 'suma'},
             {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 60, 'max': 100, 'tipo': 'suma'},
-            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'min': 115, 'max': 190, 'tipo': 'suma'},
-            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 60, 'max': 80, 'tipo': 'media'}
+            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (m/s²)', 'min': 115, 'max': 190, 'tipo': 'suma'},
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 60, 'max': 80, 'tipo': 'media'}
         ]
     else:  # estandar
         return [
             {'id': 'total_distance', 'label': 'Distancia Total', 'min': 170, 'max': 230, 'tipo': 'suma'},
             {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 90, 'max': 160, 'tipo': 'suma'},
             {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 80, 'max': 140, 'tipo': 'suma'},
-            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3', 'min': 190, 'max': 290, 'tipo': 'suma'},
-            {'id': 'ritmo_medio', 'label': 'Ritmo Medio', 'min': 60, 'max': 80, 'tipo': 'media'}
+            {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (m/s²)', 'min': 190, 'max': 290, 'tipo': 'suma'},
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 60, 'max': 80, 'tipo': 'media'}
         ]
 
 # Función para obtener el contenido de "Microciclo Equipo" (contenido actual)
@@ -1001,6 +1013,29 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
         }
     }
     
+    umbrales_superrecortado = {
+        'total_distance': {
+            'MD-2': {'min': 0.35, 'max': 0.6},
+            'MD-1': {'min': 0.50, 'max': 0.90}
+        },
+        'distancia_21_kmh': {
+            'MD-2': {'min': 0.10, 'max': 0.30},
+            'MD-1': {'min': 0.10, 'max': 0.30}
+        },
+        'distancia_24_kmh': {
+            'MD-2': {'min': 0.10, 'max': 0.20},
+            'MD-1': {'min': 0.10, 'max': 0.20}
+        },
+        'acc_dec_total': {
+            'MD-2': {'min': 0.35, 'max': 0.65},
+            'MD-1': {'min': 0.30, 'max': 0.55}
+        },
+        'ritmo_medio': {
+            'MD-2': {'min': 0.40, 'max': 0.70},
+            'MD-1': {'min': 0.20, 'max': 0.60}
+        }
+    }
+    
     # Detectar tipo de microciclo (solo si no viene en maximos_historicos)
     if maximos_historicos and 'tipo_microciclo' in maximos_historicos:
         tipo_microciclo = maximos_historicos['tipo_microciclo']
@@ -1013,6 +1048,8 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
     # Seleccionar umbrales según tipo
     if tipo_microciclo == 'extendido':
         umbrales_multiplicadores = umbrales_extendido
+    elif tipo_microciclo == 'superrecortado':
+        umbrales_multiplicadores = umbrales_superrecortado
     elif tipo_microciclo == 'reducido':
         umbrales_multiplicadores = umbrales_reducido
     else:
@@ -4108,8 +4145,8 @@ def cargar_estadisticas_md(n_clicks):
         'total_distance': 'Distancia Total (m)',
         'distancia_21_kmh': 'Distancia +21km/h (m)',
         'distancia_24_kmh': 'Distancia +24km/h (m)',
-        'acc_dec_total': 'Aceleraciones/Deceleraciones +3',
-        'ritmo_medio': 'Ritmo Medio',
+        'acc_dec_total': 'Aceleraciones/Deceleraciones +3 (m/s²)',
+        'ritmo_medio': 'Ritmo Medio (m/min.)',
         'max_vel': 'Velocidad Máxima (km/h)'
     }
     
