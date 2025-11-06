@@ -8,8 +8,8 @@ from utils.layouts import standard_page
 # Importar el contenido de evolutivo temporada para la pestaña 2
 from pages.competicion_evolutivo_temporada import build_layout_content_only as get_evolutivo_temporada_content
 
-# Importar el contenido de mapas de rendimiento para la pestaña 4
-from pages.mapas_estilo_rendimiento import get_mapas_rendimiento_content
+# Importar el contenido de diagramas funcionales para la pestaña 4
+from pages.diagramas_funcionales import get_diagramas_funcionales_content
 
 def get_tendencia_resultados_content():
     """Contenido de la pestaña Tendencia Resultados - Importa desde tendencia_resultados.py"""
@@ -32,7 +32,7 @@ def get_perfil_estilo_rendimiento_content():
         html.Div([
             html.Div([
                 html.Button(
-                    "Perfil Estilo",
+                    "Perfil Estilo de Juego",
                     id="subtab-per-estilo",
                     className="subtab-button",
                     style={
@@ -40,14 +40,14 @@ def get_perfil_estilo_rendimiento_content():
                         "color": "white",
                         "border": "none",
                         "borderRadius": "6px",
-                        "padding": "12px 50px",
+                        "padding": "12px 40px",
                         "fontWeight": "600",
                         "fontSize": "14px",
                         "cursor": "pointer",
                         "transition": "all 0.2s ease",
                         "marginRight": "10px",
                         "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-                        "minWidth": "360px"
+                        "minWidth": "260px"
                     }
                 ),
                 html.Button(
@@ -59,13 +59,30 @@ def get_perfil_estilo_rendimiento_content():
                         "color": "#6c757d",
                         "border": "1px solid #e9ecef",
                         "borderRadius": "6px",
-                        "padding": "12px 50px",
+                        "padding": "12px 40px",
                         "fontWeight": "500",
                         "fontSize": "14px",
                         "cursor": "pointer",
                         "transition": "all 0.2s ease",
                         "marginRight": "10px",
-                        "minWidth": "360px"
+                        "minWidth": "260px"
+                    }
+                ),
+                html.Button(
+                    "Diagramas Funcionales",
+                    id="subtab-per-diagramas",
+                    className="subtab-button",
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "color": "#6c757d",
+                        "border": "1px solid #e9ecef",
+                        "borderRadius": "6px",
+                        "padding": "12px 40px",
+                        "fontWeight": "500",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "minWidth": "260px"
                     }
                 )
             ], style={
@@ -106,8 +123,10 @@ def get_uso_aprovechamiento_content():
         ], style={"textAlign": "center", "padding": "60px 20px"})
     ], className="p-4")
 
-def get_mapas_funcionales_content():
-    """Contenido de la pestaña Mapas Funcionales con sub-navegación"""
+# Función eliminada - ahora se usa get_diagramas_funcionales_content() importada arriba
+
+def get_mapas_funcionales_old():
+    """DEPRECADO - Contenido antiguo de Mapas Funcionales"""
     from pages.mapas_estilo_rendimiento import create_scatter_block
     
     return html.Div([
@@ -275,7 +294,7 @@ layout = standard_page([
                         "fontSize": "15px",
                         "cursor": "pointer",
                         "transition": "all 0.2s ease",
-                        "width": "20%",
+                        "width": "25%",
                         "textAlign": "center"
                     }
                 ),
@@ -294,26 +313,7 @@ layout = standard_page([
                         "fontSize": "15px",
                         "cursor": "pointer",
                         "transition": "all 0.2s ease",
-                        "width": "20%",
-                        "textAlign": "center"
-                    }
-                ),
-                html.Button(
-                    "Mapas Funcionales",
-                    id="tab-rc-mapas",
-                    className="tab-button",
-                    style={
-                        "backgroundColor": "transparent",
-                        "color": "#6c757d",
-                        "border": "none",
-                        "borderBottom": "3px solid transparent",
-                        "borderRadius": "0",
-                        "padding": "15px 0",
-                        "fontWeight": "500",
-                        "fontSize": "15px",
-                        "cursor": "pointer",
-                        "transition": "all 0.2s ease",
-                        "width": "20%",
+                        "width": "25%",
                         "textAlign": "center"
                     }
                 ),
@@ -332,7 +332,7 @@ layout = standard_page([
                         "fontSize": "15px",
                         "cursor": "pointer",
                         "transition": "all 0.2s ease",
-                        "width": "20%",
+                        "width": "25%",
                         "textAlign": "center"
                     }
                 )
@@ -357,20 +357,20 @@ layout = standard_page([
     ], className="shadow-sm", style={"border": "1px solid #e9ecef", "borderRadius": "8px"})
 ])
 
-# Callback para manejar el cambio de sub-pestañas en Mapas Funcionales
-@callback(
-    [Output("subtab-mf-goles", "style"),
-     Output("subtab-mf-eficacia", "style"),
-     Output("subtab-mf-funcionalidad", "style"),
-     Output("subtab-mf-fisico", "style"),
-     Output("mf-subtab-content", "children")],
-    [Input("subtab-mf-goles", "n_clicks"),
-     Input("subtab-mf-eficacia", "n_clicks"),
-     Input("subtab-mf-funcionalidad", "n_clicks"),
-     Input("subtab-mf-fisico", "n_clicks")]
-)
-def update_mf_subtabs(n_goles, n_eficacia, n_funcionalidad, n_fisico):
-    """Actualiza las sub-pestañas de Mapas Funcionales"""
+# DEPRECADO - Callback antiguo de Mapas Funcionales (ahora se usa sidebar en diagramas_funcionales.py)
+# @callback(
+#     [Output("subtab-mf-goles", "style"),
+#      Output("subtab-mf-eficacia", "style"),
+#      Output("subtab-mf-funcionalidad", "style"),
+#      Output("subtab-mf-fisico", "style"),
+#      Output("mf-subtab-content", "children")],
+#     [Input("subtab-mf-goles", "n_clicks"),
+#      Input("subtab-mf-eficacia", "n_clicks"),
+#      Input("subtab-mf-funcionalidad", "n_clicks"),
+#      Input("subtab-mf-fisico", "n_clicks")]
+# )
+def update_mf_subtabs_old(n_goles, n_eficacia, n_funcionalidad, n_fisico):
+    """DEPRECADO - Actualiza las sub-pestañas de Mapas Funcionales"""
     from pages.mapas_estilo_rendimiento import create_scatter_block
     
     # Estilos
@@ -478,11 +478,13 @@ def update_mf_subtabs(n_goles, n_eficacia, n_funcionalidad, n_fisico):
 @callback(
     [Output("subtab-per-estilo", "style"),
      Output("subtab-per-rendimiento", "style"),
+     Output("subtab-per-diagramas", "style"),
      Output("per-subtab-content", "children")],
     [Input("subtab-per-estilo", "n_clicks"),
-     Input("subtab-per-rendimiento", "n_clicks")]
+     Input("subtab-per-rendimiento", "n_clicks"),
+     Input("subtab-per-diagramas", "n_clicks")]
 )
-def update_per_subtabs(n_estilo, n_rendimiento):
+def update_per_subtabs(n_estilo, n_rendimiento, n_diagramas):
     """Actualiza las sub-pestañas de Perfil Estilo-Rendimiento"""
     
     # Estilos
@@ -491,13 +493,13 @@ def update_per_subtabs(n_estilo, n_rendimiento):
         "color": "#6c757d",
         "border": "1px solid #e9ecef",
         "borderRadius": "6px",
-        "padding": "12px 50px",
+        "padding": "12px 40px",
         "fontWeight": "500",
         "fontSize": "14px",
         "cursor": "pointer",
         "transition": "all 0.2s ease",
         "marginRight": "10px",
-        "minWidth": "360px"
+        "minWidth": "260px"
     }
     
     style_active = {
@@ -505,14 +507,14 @@ def update_per_subtabs(n_estilo, n_rendimiento):
         "color": "white",
         "border": "none",
         "borderRadius": "6px",
-        "padding": "12px 50px",
+        "padding": "12px 40px",
         "fontWeight": "600",
         "fontSize": "14px",
         "cursor": "pointer",
         "transition": "all 0.2s ease",
         "marginRight": "10px",
         "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-        "minWidth": "360px"
+        "minWidth": "260px"
     }
     
     # Detectar qué botón fue clickeado
@@ -525,20 +527,24 @@ def update_per_subtabs(n_estilo, n_rendimiento):
             active_subtab = 0
         elif button_id == 'subtab-per-rendimiento':
             active_subtab = 1
+        elif button_id == 'subtab-per-diagramas':
+            active_subtab = 2
         else:
-            active_subtab = 1
+            active_subtab = 0
     
     # Establecer estilos
-    styles = [style_inactive] * 2
+    styles = [style_inactive] * 3
     styles[active_subtab] = style_active
     
     # Establecer contenido
     if active_subtab == 0:
         content = get_perfil_estilo_content()
-    else:
+    elif active_subtab == 1:
         content = get_perfil_rendimiento_content()
+    else:
+        content = get_diagramas_funcionales_content()
     
-    return styles[0], styles[1], content
+    return styles[0], styles[1], styles[2], content
 
 
 # Callback para manejar el cambio de pestañas
@@ -546,16 +552,14 @@ def update_per_subtabs(n_estilo, n_rendimiento):
     [Output("tab-rc-tendencia", "style"),
      Output("tab-rc-perfil", "style"),
      Output("tab-rc-aprovechamiento", "style"),
-     Output("tab-rc-mapas", "style"),
      Output("tab-rc-contextos", "style"),
      Output("rc-tab-content", "children")],
     [Input("tab-rc-tendencia", "n_clicks"),
      Input("tab-rc-perfil", "n_clicks"),
      Input("tab-rc-aprovechamiento", "n_clicks"),
-     Input("tab-rc-mapas", "n_clicks"),
      Input("tab-rc-contextos", "n_clicks")]
 )
-def update_tabs(n_clicks_tendencia, n_clicks_perfil, n_clicks_aprovechamiento, n_clicks_mapas, n_clicks_contextos):
+def update_tabs(n_clicks_tendencia, n_clicks_perfil, n_clicks_aprovechamiento, n_clicks_contextos):
     """Actualiza el estilo de las pestañas y el contenido según la selección"""
     
     # Estilos base
@@ -570,7 +574,7 @@ def update_tabs(n_clicks_tendencia, n_clicks_perfil, n_clicks_aprovechamiento, n
         "fontSize": "15px",
         "cursor": "pointer",
         "transition": "all 0.2s ease",
-        "width": "20%",
+        "width": "25%",
         "textAlign": "center"
     }
     
@@ -585,7 +589,7 @@ def update_tabs(n_clicks_tendencia, n_clicks_perfil, n_clicks_aprovechamiento, n
         "fontSize": "15px",
         "cursor": "pointer",
         "transition": "all 0.2s ease",
-        "width": "20%",
+        "width": "25%",
         "textAlign": "center"
     }
     
@@ -605,15 +609,13 @@ def update_tabs(n_clicks_tendencia, n_clicks_perfil, n_clicks_aprovechamiento, n
             active_tab = 1
         elif button_id == 'tab-rc-aprovechamiento':
             active_tab = 2
-        elif button_id == 'tab-rc-mapas':
-            active_tab = 3
         elif button_id == 'tab-rc-contextos':
-            active_tab = 4
+            active_tab = 3
         else:
             active_tab = 1
     
     # Establecer estilos según la pestaña activa
-    styles = [style_inactive] * 5
+    styles = [style_inactive] * 4
     styles[active_tab] = style_active
     
     # Establecer contenido según la pestaña activa
@@ -623,9 +625,7 @@ def update_tabs(n_clicks_tendencia, n_clicks_perfil, n_clicks_aprovechamiento, n
         content = get_perfil_estilo_rendimiento_content()
     elif active_tab == 2:
         content = get_uso_aprovechamiento_content()
-    elif active_tab == 3:
-        content = get_mapas_funcionales_content()
     else:
         content = get_contextos_partidos_content()
     
-    return styles[0], styles[1], styles[2], styles[3], styles[4], content
+    return styles[0], styles[1], styles[2], styles[3], content

@@ -16,8 +16,15 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from sqlalchemy import inspect
 
-def fetch_indicadores_rendimiento_laliga(team_name="RC Deportivo"):
-    """Obtiene metrica, valor, ranking desde la BD LaLiga para un equipo específico."""
+def fetch_indicadores_rendimiento_laliga(team_name="RC Deportivo", for_perfil=True):
+    """
+    Obtiene metrica, valor, ranking desde la BD LaLiga para un equipo específico.
+    
+    Args:
+        team_name: Nombre del equipo
+        for_perfil: True = usa GROUPS_PERFIL_ORIGINAL (sin diferenciales)
+                   False = usa GROUPS_ORIGINAL (con diferenciales para evolutivo)
+    """
     try:
         df = get_indicadores_rendimiento_laliga(team_name)
         
@@ -25,7 +32,7 @@ def fetch_indicadores_rendimiento_laliga(team_name="RC Deportivo"):
             raise RuntimeError("Sin datos en LaLiga")
         
         # Filtrar solo las métricas definidas en los grupos
-        df_filtered = filter_metrics_by_groups(df)
+        df_filtered = filter_metrics_by_groups(df, for_perfil=for_perfil)
         
         if df_filtered.empty:
             raise RuntimeError("Sin métricas válidas")
@@ -36,17 +43,24 @@ def fetch_indicadores_rendimiento_laliga(team_name="RC Deportivo"):
         print(f"[ERROR] Error obteniendo indicadores de LaLiga: {e}")
         return None
 
-def filter_metrics_by_groups(df):
+def filter_metrics_by_groups(df, for_perfil=True):
     """
-    Filtra las métricas del DataFrame para incluir solo las definidas en GROUPS_ORIGINAL
-    y aplica el mapeo a nombres cortos.
+    Filtra las métricas del DataFrame para incluir solo las definidas en los grupos.
+    
+    Args:
+        df: DataFrame con métricas
+        for_perfil: True = usa GROUPS_PERFIL_ORIGINAL (sin diferenciales)
+                   False = usa GROUPS_ORIGINAL (con diferenciales)
     """
     if df.empty:
         return df
     
-    # Obtener todas las métricas definidas en los grupos originales
+    # Seleccionar grupos según contexto
+    groups_to_use = GROUPS_PERFIL_ORIGINAL if for_perfil else GROUPS_ORIGINAL
+    
+    # Obtener todas las métricas definidas en los grupos
     all_group_metrics = []
-    for _, metrics in GROUPS_ORIGINAL:
+    for _, metrics in groups_to_use:
         all_group_metrics.extend(metrics)
     
     # Filtrar el DataFrame para incluir solo las métricas de los grupos
@@ -349,7 +363,35 @@ METRIC_NAME_MAPPING = {
     "Expected Goals en Contra Balón Parado sin Penaltis (xG)": "xG B.P. C (N.P)",
 }
 
-# Definición de grupos usando nombres originales (para mapeo con BD)
+# Definición de grupos PARA PERFIL DE RENDIMIENTO (sin diferenciales)
+GROUPS_PERFIL_ORIGINAL = [
+    ("Rendimiento ofensivo", [
+        "Eficacia Construcción Ofensiva (%)",
+        "Eficacia Finalización (%)",
+        "Expected Goals (xG)",
+        "Goles a favor (Nº)",
+    ]),
+    ("Rendimiento defensivo", [
+        "Eficacia Contención Defensiva (%)",
+        "Eficacia Evitación (%)",
+        "Expected Goals en Contra (xG)",
+        "Goles en contra Totales (Nº)",
+    ]),
+    ("Físico-Combatividad", [
+        "Distancia Total Recorrida (m.)",
+        "Distancia Recorrida > 21 km/h (m.)",
+        "Distancia High Sprint > 24 km/h (m.)",
+        "% Duelos Aéreos Ganados",
+    ]),
+    ("Balón Parado", [
+         "Goles a favor Balón Parado sin Penaltis (Nº)",
+        "Expected Goals Balón Parado sin Penaltis (xG)",
+       "Goles en contra Balón Parado sin Penaltis (Nº)",
+        "Expected Goals en Contra Balón Parado sin Penaltis (xG)",
+    ]),
+]
+
+# Definición de grupos PARA EVOLUTIVO (con diferenciales)
 GROUPS_ORIGINAL = [
     ("Rendimiento ofensivo", [
         "Eficacia Construcción Ofensiva (%)",
@@ -377,11 +419,38 @@ GROUPS_ORIGINAL = [
         "Expected Goals Balón Parado sin Penaltis (xG)",
        "Goles en contra Balón Parado sin Penaltis (Nº)",
         "Expected Goals en Contra Balón Parado sin Penaltis (xG)",
-        
     ]),
 ]
 
-# Definición de grupos con nombres cortos (para visualización)
+# Grupos con nombres cortos PARA PERFIL (sin diferenciales)
+GROUPS_PERFIL = [
+    ("Rendimiento ofensivo", [
+        "Eficacia Construcción Of. (%)",
+        "Eficacia Finalización (%)",
+        "Xg a Favor",
+        "Goles a favor",
+    ]),
+    ("Rendimiento defensivo", [
+        "Eficacia Contención Def. (%)",
+        "Eficacia Evitación (%)",
+        "xG en Contra",
+        "Goles en contra",
+    ]),
+    ("Físico-Combatividad", [
+        "Distancia Total",
+        "Distancia > 21 km/h",
+        "Distancia > 24 km/h (m.)",
+        "% Duelos Aéreos",
+    ]),
+    ("Balón Parado", [
+        "Goles B.P. F (N.P)",
+        "xG B.P. F (N.P)",
+        "Goles B.P. C (N.P)",
+        "xG B.P. C (N.P)"
+    ]),
+]
+
+# Grupos con nombres cortos PARA EVOLUTIVO (con diferenciales)
 GROUPS = [
     ("Rendimiento ofensivo", [
         "Eficacia Construcción Of. (%)",
