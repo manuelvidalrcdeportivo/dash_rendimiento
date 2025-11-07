@@ -24,7 +24,7 @@ MAPAS_PARAMS = {
         "label_x": "Goles ABP a Favor sin Penaltis", "label_y": "Goles ABP en Contra sin Penaltis",
         "title": "Goles de Balón Parado", "invert_y": True
     },
-    # Eficacia
+    # Eficacia - Funcionalidad
     "eficacia_ofensiva": {
         "metric_x": "TeamEffectivenessOffensiveConstruction", "metric_y": "TeamEffectivenessCompletion",
         "label_x": "Eficacia Construcción Ofensiva (%)", "label_y": "Eficacia Finalización (%)",
@@ -40,7 +40,6 @@ MAPAS_PARAMS = {
         "label_x": "xG a Favor", "label_y": "xG en Contra",
         "title": "Peligrosidad Generada vs Peligrosidad Concedida", "invert_y": True
     },
-    # Funcionalidad
     "funcionalidad_profundidad": {
         "metric_x": "TeamPossessionsTimeP", "metric_y": "TeamShots",
         "label_x": "Posesión (%)", "label_y": "Remates Totales",
@@ -76,18 +75,12 @@ SECCIONES_CONFIG = [
         ]
     },
     {
-        "title": "Eficacia",
+        "title": "Eficacia - Funcionalidad",
         "icon": "fa-bullseye",
         "subsecciones": [
-            {"label": "Ofensiva", "map_key": "eficacia_ofensiva"},
-            {"label": "Defensiva", "map_key": "eficacia_defensiva"},
-            {"label": "Peligrosidad", "map_key": "eficacia_peligrosidad"}
-        ]
-    },
-    {
-        "title": "Funcionalidad Of. / Def.",
-        "icon": "fa-cogs",
-        "subsecciones": [
+            {"label": "Eficacia Ofensiva", "map_key": "eficacia_ofensiva"},
+            {"label": "Eficacia Defensiva", "map_key": "eficacia_defensiva"},
+            {"label": "Peligrosidad", "map_key": "eficacia_peligrosidad"},
             {"label": "Profundidad Ofensiva", "map_key": "funcionalidad_profundidad"},
             {"label": "Agresividad-Intensidad Def.", "map_key": "funcionalidad_agresividad"}
         ]
