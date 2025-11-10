@@ -987,9 +987,9 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
     
     umbrales_reducido = {
         'total_distance': {
-            'MD-3': {'min': 0.90, 'max': 1.10},
-            'MD-2': {'min': 0.80, 'max': 1.00},
-            'MD-1': {'min': 0.50, 'max': 0.90}
+            'MD-3': {'min': 0.65, 'max': 0.8},
+            'MD-2': {'min': 0.35, 'max': 0.5},
+            'MD-1': {'min': 0.25, 'max': 0.40}
         },
         'distancia_21_kmh': {
             'MD-3': {'min': 0.50, 'max': 0.80},
