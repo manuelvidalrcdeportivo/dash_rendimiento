@@ -236,33 +236,26 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
     datos_por_metrica = {}
     
     # Crear DataFrame filtrado para ENTRENAMIENTOS (solo jugadores seleccionados)
-    # Separar compensatorios (MD+X) de entrenamientos normales (MD-X)
+    # Filtrar Part/Rehab de TODOS los entrenamientos (MD-X y MD+X)
     df_entrenamientos = df_microciclo[
         (df_microciclo['activity_tag'] != 'MD') & 
         (df_microciclo['athlete_id'].isin(jugadores_ids))
     ].copy()
     
-    # COMPENSATORIOS (MD+X): Filtrar Part/Rehab - solo Full
-    # Identificar compensatorios por patrón MD+X
-    df_entrenamientos['es_compensatorio'] = df_entrenamientos['activity_tag'].apply(
-        lambda x: bool(re.match(r'^MD\+\d+$', str(x)))
-    )
+    print(f"  ℹ️ Entrenamientos ANTES de filtrar Part/Rehab: {len(df_entrenamientos)} registros")
     
-    # Filtrar compensatorios: solo participation_type Full (NULL o no Part/Rehab)
+    # Filtrar Part/Rehab de TODOS los entrenamientos (MD-X y MD+X)
+    # Solo mantener participation_type Full (NULL o no Part/Rehab)
     df_entrenamientos_filtrado = df_entrenamientos[
-        (~df_entrenamientos['es_compensatorio']) |
-        (
-            df_entrenamientos['es_compensatorio'] & 
-            (df_entrenamientos['participation_type'].isna() | 
-             ~df_entrenamientos['participation_type'].isin(['Part', 'Rehab']))
-        )
+        (df_entrenamientos['participation_type'].isna()) | 
+        (~df_entrenamientos['participation_type'].isin(['Part', 'Rehab']))
     ].copy()
     
-    print(f"  ℹ️ Entrenamientos antes filtro compensatorio: {len(df_entrenamientos)} registros")
-    print(f"  ℹ️ Entrenamientos después filtro compensatorio: {len(df_entrenamientos_filtrado)} registros")
+    print(f"  ℹ️ Entrenamientos DESPUÉS de filtrar Part/Rehab: {len(df_entrenamientos_filtrado)} registros")
+    print(f"  ℹ️ Registros eliminados (Part/Rehab): {len(df_entrenamientos) - len(df_entrenamientos_filtrado)}")
     
     # Reemplazar df_entrenamientos con la versión filtrada
-    df_entrenamientos = df_entrenamientos_filtrado.drop(columns=['es_compensatorio'])
+    df_entrenamientos = df_entrenamientos_filtrado
     
     # DataFrame para MD (TODOS los jugadores, solo el primer MD cronológicamente)
     if fecha_md is not None:
@@ -287,12 +280,22 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
         
         # Agrupar ENTRENAMIENTOS (solo jugadores seleccionados)
         # Ya filtrados los compensatorios por participation_type = Full
+        
         df_metrica_entrenos = df_entrenamientos.groupby('activity_tag').agg({
             col_name: 'mean',
             'athlete_id': 'count',
             'activity_date': 'min'
         }).reset_index()
         df_metrica_entrenos.columns = ['activity_tag', 'avg_metric', 'count_athletes', 'fecha']
+        
+        # Logging para MD+1 y MD+2 (compensatorios)
+        if metric_name == 'total_distance':
+            for tag in ['MD+1', 'MD+2']:
+                df_tag = df_metrica_entrenos[df_metrica_entrenos['activity_tag'] == tag]
+                if not df_tag.empty:
+                    valor = df_tag['avg_metric'].values[0]
+                    count = df_tag['count_athletes'].values[0]
+                    print(f"    → {tag}: {valor:.1f}m (promedio de {count} jugadores Full)")
         
         # Agrupar MD (TODOS los jugadores, procesamiento especial después)
         if not df_md_completo.empty:
@@ -337,6 +340,12 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
     # Los umbrales ahora están hardcodeados en la función de generación de gráficos
     # para mejorar el rendimiento (sin queries adicionales)
     print("✅ Umbrales hardcodeados (sin queries)")
+    
+    # Mostrar días presentes
+    dias_presentes = []
+    if 'total_distance' in datos_por_metrica:
+        dias_presentes = datos_por_metrica['total_distance']['activity_tag'].tolist()
+    print(f"   Días presentes: {dias_presentes}")
     
     return {
         'datos_por_metrica': datos_por_metrica,
@@ -538,3 +547,503 @@ def calcular_maximo_individual_jugador(athlete_id, metric_name, fecha_referencia
             'ultimo_md_fecha': None,
             'warning': f'ERROR: {str(e)}'
         }
+
+
+def obtener_compensatorios_tabla(microciclos, jugadores_ids=None):
+    """
+    Obtiene los valores de compensatorio (MD+1 o MD+2) en distancia total para cada microciclo.
+    USA EL MISMO CÁLCULO que el gráfico de visualización de carga (pandas groupby).
+    
+    Args:
+        microciclos: Lista de diccionarios con microciclos
+        jugadores_ids: Lista de IDs de jugadores a incluir (None = todos excepto porteros)
+    
+    Retorna dict: {microciclo_id: {'valor': float, 'porcentaje': float, 'color': str}}
+    """
+    engine = get_db_connection()
+    compensatorios = {}
+    
+    print("\n" + "="*80)
+    print("🔍 CÁLCULO DE COMPENSATORIOS PARA TABLA EVOLUTIVA")
+    print("="*80)
+    print(f"Total microciclos a procesar: {len(microciclos)}")
+    print(f"Jugadores seleccionados: {len(jugadores_ids) if jugadores_ids else 'TODOS (sin porteros)'}\n")
+    
+    # Query para obtener máximos históricos (IGUAL que tabla evolutiva para Distancia Total)
+    # Normalizado a 94 mins para jugadores con +70 mins
+    query_maximos = '''
+        SELECT 
+            activity_date as fecha_md,
+            AVG(CASE WHEN field_time >= 4200 THEN total_distance * (5640/field_time) END) as max_total_distance
+        FROM microciclos_metricas_procesadas
+        WHERE activity_tag = 'MD'
+          AND athlete_position != 'Goal Keeper'
+          AND field_time >= 4200
+          AND (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab'))
+        GROUP BY activity_date
+        ORDER BY activity_date DESC
+    '''
+    
+    df_maximos = pd.read_sql(query_maximos, engine)
+    
+    for mc in microciclos:
+        mc_id = mc['id']
+        
+        try:
+            # Cargar datos del microciclo completo (igual que el gráfico)
+            query_microciclo = f'''
+                SELECT 
+                    activity_tag,
+                    athlete_id,
+                    activity_date,
+                    total_distance,
+                    athlete_position,
+                    participation_type
+                FROM microciclos_metricas_procesadas
+                WHERE microciclo_id = '{mc_id}'
+                  AND athlete_position != 'Goal Keeper'
+            '''
+            
+            df_mc = pd.read_sql(query_microciclo, engine)
+            
+            if df_mc.empty:
+                compensatorios[mc_id] = {'valor': None, 'porcentaje': None, 'color': 'gris'}
+                continue
+            
+            # Obtener fecha del MD (para buscar máximo histórico)
+            df_md = df_mc[df_mc['activity_tag'] == 'MD']
+            if df_md.empty:
+                compensatorios[mc_id] = {'valor': None, 'porcentaje': None, 'color': 'gris'}
+                continue
+            
+            fecha_md = df_md['activity_date'].min()
+            
+            # Filtrar por jugadores seleccionados (IGUAL que el gráfico)
+            print(f"\n📊 COMPENSATORIO {mc_id}:")
+            print(f"  Jugadores seleccionados: {len(jugadores_ids) if jugadores_ids else 'TODOS'}")
+            
+            if jugadores_ids:
+                df_entrenamientos = df_mc[
+                    (df_mc['activity_tag'] != 'MD') &
+                    (df_mc['athlete_id'].isin(jugadores_ids))
+                ]
+            else:
+                df_entrenamientos = df_mc[df_mc['activity_tag'] != 'MD']
+            
+            # Buscar MD+1 primero
+            df_md_plus_1 = df_entrenamientos[
+                (df_entrenamientos['activity_tag'] == 'MD+1') &
+                ((df_entrenamientos['participation_type'].isna()) | 
+                 (~df_entrenamientos['participation_type'].isin(['Part', 'Rehab'])))
+            ]
+            
+            if not df_md_plus_1.empty:
+                print(f"  MD+1: {df_md_plus_1['athlete_id'].nunique()} jug, {df_md_plus_1['total_distance'].mean():.1f}m")
+            
+            # Usar MD+1 si tiene datos
+            if not df_md_plus_1.empty and not df_md_plus_1['total_distance'].isna().all():
+                df_compensatorio = df_md_plus_1
+                compensatorio_tag = 'MD+1'
+            else:
+                # Buscar MD+2
+                df_md_plus_2_sin_filtro = df_entrenamientos[df_entrenamientos['activity_tag'] == 'MD+2']
+                df_md_plus_2 = df_entrenamientos[
+                    (df_entrenamientos['activity_tag'] == 'MD+2') &
+                    ((df_entrenamientos['participation_type'].isna()) | 
+                     (~df_entrenamientos['participation_type'].isin(['Part', 'Rehab'])))
+                ]
+                
+                print(f"  MD+2 sin filtro Part/Rehab: {len(df_md_plus_2_sin_filtro)} registros")
+                if not df_md_plus_2_sin_filtro.empty:
+                    print(f"    Jugadores: {df_md_plus_2_sin_filtro['athlete_id'].nunique()}")
+                    print(f"    Distancia promedio: {df_md_plus_2_sin_filtro['total_distance'].mean():.1f}m")
+                
+                print(f"  MD+2 CON filtro Part/Rehab: {len(df_md_plus_2)} registros")
+                if not df_md_plus_2.empty:
+                    print(f"    Jugadores: {df_md_plus_2['athlete_id'].nunique()}")
+                    print(f"    Distancia promedio: {df_md_plus_2['total_distance'].mean():.1f}m")
+                    print(f"    Jugadores: {sorted(df_md_plus_2['athlete_id'].unique())}")
+                
+                df_compensatorio = df_md_plus_2
+                compensatorio_tag = 'MD+2'
+            
+            # Si no hay ni MD+1 ni MD+2, sin datos
+            if df_compensatorio.empty or df_compensatorio['total_distance'].isna().all():
+                compensatorios[mc_id] = {'valor': None, 'porcentaje': None, 'color': 'gris'}
+                continue
+            
+            # Calcular promedio con pandas (IGUAL que el gráfico)
+            valor = df_compensatorio['total_distance'].mean()
+            num_jugadores = len(df_compensatorio['athlete_id'].unique())
+            
+            print(f"  ✅ Compensatorio elegido: {compensatorio_tag}")
+            print(f"     Valor calculado: {valor:.1f}m (promedio de {num_jugadores} jugadores)")
+            
+            if pd.isna(valor):
+                compensatorios[mc_id] = {'valor': None, 'porcentaje': None, 'color': 'gris'}
+                continue
+            
+            # Obtener máximos históricos hasta esta fecha (últimos 4 MDs)
+            df_maximos_hasta_fecha = df_maximos[df_maximos['fecha_md'] <= fecha_md].head(4)
+            
+            if not df_maximos_hasta_fecha.empty:
+                # IMPORTANTE: Usar MAX de los máximos (igual que el gráfico)
+                max_historico = df_maximos_hasta_fecha['max_total_distance'].max()
+                
+                print(f"     Máximo histórico: {max_historico:.1f}m (máximo de {len(df_maximos_hasta_fecha)} MDs)")
+                print(f"     Fechas usadas: {df_maximos_hasta_fecha['fecha_md'].tolist()}")
+                print(f"     Valores: {df_maximos_hasta_fecha['max_total_distance'].tolist()}")
+                
+                # Calcular porcentaje relativo al máximo histórico (igual que otras métricas)
+                porcentaje = (valor / max_historico) * 100 if max_historico > 0 else 0
+                
+                # Redondear ANTES de asignar color (igual que resto de métricas)
+                porcentaje_redondeado = round(porcentaje)
+                
+                print(f"     Porcentaje: {porcentaje:.2f}% → {porcentaje_redondeado}%")
+                
+                # Color: verde (55-70%), rojo_claro (<55%), rojo_oscuro (>70%)
+                if 55 <= porcentaje_redondeado <= 70:
+                    color = 'verde'
+                elif porcentaje_redondeado < 55:
+                    color = 'rojo_claro'
+                else:  # > 70
+                    color = 'rojo_oscuro'
+                
+                print(f"     Color: {color}")
+                print(f"     📋 VALOR EN TABLA: {porcentaje_redondeado}%\n")
+                
+                compensatorios[mc_id] = {
+                    'valor': valor,
+                    'porcentaje': porcentaje_redondeado,
+                    'color': color
+                }
+            else:
+                compensatorios[mc_id] = {
+                    'valor': None,
+                    'porcentaje': None,
+                    'color': 'gris'
+                }
+        except Exception as e:
+            print(f"  ❌ Error en {mc_id}: {e}")
+            compensatorios[mc_id] = {
+                'valor': None,
+                'porcentaje': None,
+                'color': 'gris'
+            }
+    
+    print("\n" + "="*80)
+    print(f"✅ COMPENSATORIOS CALCULADOS: {len(compensatorios)} microciclos")
+    print("="*80 + "\n")
+    
+    engine.dispose()
+    return compensatorios
+
+def cargar_tabla_evolutiva_microciclos(jugadores_ids=None):
+    """
+    Carga TODOS los microciclos de la temporada y calcula acumulados para tabla evolutiva.
+    
+    ULTRA-OPTIMIZADO: Una sola query masiva para todos los microciclos.
+    
+    Args:
+        jugadores_ids: Lista de IDs de jugadores (None = todos excepto porteros)
+    
+    Returns:
+        dict con estructura:
+        {
+            'microciclos': [
+                {
+                    'id': 'mc_2025-08-16_J1_...',
+                    'jornada': 'J1',
+                    'rival': 'GRANADA CF',
+                    'fecha_md': '2025-08-16',
+                    'tipo_microciclo': 'estandar'
+                },
+                ...
+            ],
+            'acumulados': {
+                'total_distance': {
+                    'mc_2025-08-16_J1_...': {
+                        'acumulado': 185.5,  # % acumulado
+                        'color': 'verde',  # verde, rojo_claro, rojo_oscuro
+                        'min_umbral': 170,
+                        'max_umbral': 230
+                    },
+                    ...
+                },
+                ...
+            }
+        }
+    """
+    print(f"📊 Cargando tabla evolutiva de microciclos...")
+    
+    engine = get_db_connection()
+    if not engine:
+        return None
+    
+    try:
+        # Query 1: Obtener todos los microciclos de la temporada (ordenados cronológicamente)
+        # Filtrar desde 08/08/2025 (inicio de temporada)
+        query_microciclos = '''
+            SELECT DISTINCT
+                microciclo_id,
+                microciclo_nombre,
+                MIN(activity_date) as fecha_inicio,
+                MAX(activity_date) as fecha_fin,
+                MAX(CASE WHEN activity_tag = 'MD' THEN activity_date END) as fecha_md,
+                MAX(CASE WHEN activity_tag = 'MD' THEN activity_name END) as partido_nombre
+            FROM microciclos_metricas_procesadas
+            WHERE athlete_position != 'Goal Keeper'
+              AND activity_date >= '2025-08-08'
+            GROUP BY microciclo_id, microciclo_nombre
+            HAVING fecha_md IS NOT NULL
+            ORDER BY fecha_inicio ASC
+        '''
+        
+        df_microciclos = pd.read_sql(query_microciclos, engine)
+        
+        if df_microciclos.empty:
+            print("  ⚠️ No se encontraron microciclos")
+            return None
+        
+        print(f"  ✅ {len(df_microciclos)} microciclos encontrados")
+        
+        # Procesar información de cada microciclo
+        microciclos_info = []
+        for _, row in df_microciclos.iterrows():
+            # Label simplificado: quitar "Semana" y fechas
+            # Ejemplo: "Semana J1 GRANADA CF VS RC DEPORTIVO" -> "J1 GRANADA CF VS RC DEPORTIVO"
+            label_simplificado = row['microciclo_nombre'].replace('Semana ', '')
+            
+            # Extraer jornada para la tabla
+            match_jornada = re.search(r'J(\d+)', row['microciclo_nombre'])
+            jornada = f"J{match_jornada.group(1)}" if match_jornada else "???"
+            
+            microciclos_info.append({
+                'id': row['microciclo_id'],
+                'label': label_simplificado,  # Label simplificado sin "Semana" ni fechas
+                'jornada': jornada,  # Solo la jornada para primera línea
+                'fecha_md': row['fecha_md'],
+                'tipo_microciclo': None  # Se calculará después
+            })
+        
+        # Query 2: Obtener datos de entrenamientos (MD-X) para TODOS los microciclos
+        # Solo necesitamos los entrenamientos, no MD ni compensatorios
+        # TAMBIÉN obtener los activity_tags para detectar el tipo de microciclo
+        filtro_jugadores = ""
+        if jugadores_ids:
+            jugadores_ids_quoted = ','.join([f"'{j}'" for j in jugadores_ids])
+            filtro_jugadores = f"AND athlete_id IN ({jugadores_ids_quoted})"
+        
+        query_entrenamientos = f'''
+            SELECT 
+                microciclo_id,
+                activity_tag,
+                AVG(total_distance) as avg_total_distance,
+                AVG(distancia_21_kmh) as avg_distancia_21_kmh,
+                AVG(distancia_24_kmh) as avg_distancia_24_kmh,
+                AVG(acc_dec_total) as avg_acc_dec_total,
+                AVG(ritmo_medio) as avg_ritmo_medio,
+                COUNT(DISTINCT athlete_id) as num_athletes
+            FROM microciclos_metricas_procesadas
+            WHERE activity_tag REGEXP '^MD-[0-9]+$'
+              AND athlete_position != 'Goal Keeper'
+              AND (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab'))
+              {filtro_jugadores}
+            GROUP BY microciclo_id, activity_tag
+            ORDER BY microciclo_id, activity_tag
+        '''
+        
+        df_entrenamientos = pd.read_sql(query_entrenamientos, engine)
+        
+        # Query 3: Obtener máximos históricos para cada microciclo (últimos 4 MDs)
+        # Necesitamos el máximo histórico para calcular los %
+        # IMPORTANTE: Usar los mismos filtros que en seguimiento de carga
+        query_maximos = '''
+            SELECT 
+                activity_date as fecha_md,
+                AVG(CASE WHEN field_time >= 4200 THEN total_distance * (5640/field_time) END) as max_total_distance,
+                AVG(CASE WHEN field_time >= 4200 THEN distancia_21_kmh * (5640/field_time) END) as max_distancia_21_kmh,
+                AVG(CASE WHEN field_time >= 4200 THEN distancia_24_kmh * (5640/field_time) END) as max_distancia_24_kmh,
+                AVG(CASE WHEN field_time >= 4200 THEN acc_dec_total * (5640/field_time) END) as max_acc_dec_total,
+                AVG(CASE WHEN field_time >= 4200 THEN ritmo_medio END) as max_ritmo_medio
+            FROM microciclos_metricas_procesadas
+            WHERE activity_tag = 'MD'
+              AND athlete_position != 'Goal Keeper'
+              AND field_time >= 4200
+              AND (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab'))
+            GROUP BY activity_date
+            ORDER BY activity_date DESC
+        '''
+        
+        df_maximos = pd.read_sql(query_maximos, engine)
+        
+        print(f"  ✅ Datos cargados: {len(df_entrenamientos)} registros de entrenamientos")
+        
+        # Calcular acumulados para cada métrica y microciclo
+        metricas = ['total_distance', 'distancia_21_kmh', 'distancia_24_kmh', 'acc_dec_total', 'ritmo_medio']
+        acumulados = {metrica: {} for metrica in metricas}
+        
+        for mc_info in microciclos_info:
+            mc_id = mc_info['id']
+            fecha_md = mc_info['fecha_md']
+            
+            # Filtrar entrenamientos de este microciclo
+            df_mc = df_entrenamientos[df_entrenamientos['microciclo_id'] == mc_id]
+            
+            if df_mc.empty:
+                # No hay entrenamientos, marcar como sin datos
+                for metrica in metricas:
+                    acumulados[metrica][mc_id] = {
+                        'acumulado': None,
+                        'color': 'gris',
+                        'min_umbral': None,
+                        'max_umbral': None
+                    }
+                mc_info['tipo_microciclo'] = 'especial'
+                continue
+            
+            # Obtener máximos históricos hasta esta fecha (últimos 4 MDs)
+            df_maximos_hasta_fecha = df_maximos[df_maximos['fecha_md'] <= fecha_md].head(4)
+            
+            # Calcular acumulado para cada métrica
+            for metrica in metricas:
+                col_avg = f'avg_{metrica}'
+                col_max = f'max_{metrica}'
+                
+                # Ya NO es necesario agrupar porque SQL ya agrupa por activity_tag
+                # SQL: GROUP BY microciclo_id, activity_tag
+                # Resultado: 1 registro por (microciclo, activity_tag)
+                
+                # Obtener valores de entrenamientos (MD-X) - ya vienen agrupados de SQL
+                valores_entrenamientos = df_mc[col_avg].dropna().tolist()
+                
+                if not valores_entrenamientos or df_maximos_hasta_fecha.empty:
+                    acumulados[metrica][mc_id] = {
+                        'acumulado': None,
+                        'color': 'gris',
+                        'min_umbral': None,
+                        'max_umbral': None
+                    }
+                    continue
+                
+                # Obtener máximo histórico
+                max_historico = df_maximos_hasta_fecha[col_max].max()
+                
+                if not max_historico or max_historico == 0:
+                    acumulados[metrica][mc_id] = {
+                        'acumulado': None,
+                        'color': 'gris',
+                        'min_umbral': None,
+                        'max_umbral': None
+                    }
+                    continue
+                
+                # Calcular % de cada entrenamiento sobre el máximo histórico
+                porcentajes = [(valor / max_historico) * 100 for valor in valores_entrenamientos]
+                
+                # Acumulado depende del tipo de métrica
+                if metrica == 'ritmo_medio':
+                    acumulado_pct = sum(porcentajes) / len(porcentajes)  # Media
+                else:
+                    acumulado_pct = sum(porcentajes)  # Suma
+                
+                # IMPORTANTE: Redondear ANTES de guardar para que el color se base en el valor mostrado
+                acumulado_pct_redondeado = round(acumulado_pct)
+                
+                # Guardar acumulado REDONDEADO (sin determinar color aún, se hará después con tipo_microciclo)
+                acumulados[metrica][mc_id] = {
+                    'acumulado': acumulado_pct_redondeado,  # Guardar redondeado
+                    'color': None,  # Se asignará después
+                    'min_umbral': None,  # Se asignará después
+                    'max_umbral': None,  # Se asignará después
+                    'num_entrenamientos': len(valores_entrenamientos)
+                }
+        
+        # Determinar tipo de microciclo basado en los DÍAS PRESENTES (igual que en Seguimiento de Carga)
+        # Usar la misma lógica que detectar_tipo_microciclo()
+        from pages.seguimiento_carga import detectar_tipo_microciclo
+        
+        for mc_info in microciclos_info:
+            mc_id = mc_info['id']
+            
+            # Obtener días presentes en este microciclo desde df_entrenamientos
+            df_mc = df_entrenamientos[df_entrenamientos['microciclo_id'] == mc_id]
+            
+            if df_mc.empty:
+                mc_info['tipo_microciclo'] = 'especial'
+                print(f"  📊 {mc_info['jornada']}: Sin entrenamientos → Tipo: especial")
+                continue
+            
+            # Obtener lista de activity_tags únicos
+            dias_presentes = df_mc['activity_tag'].unique().tolist()
+            
+            # Detectar tipo usando la misma función que el seguimiento de carga
+            tipo = detectar_tipo_microciclo(dias_presentes)
+            
+            print(f"  📊 {mc_info['jornada']}: Días presentes {dias_presentes} → Tipo: {tipo}")
+            mc_info['tipo_microciclo'] = tipo
+        
+        # Ahora asignar umbrales y colores basados en el tipo de microciclo
+        from pages.seguimiento_carga import get_metricas_config_por_tipo
+        
+        for mc_info in microciclos_info:
+            mc_id = mc_info['id']
+            tipo = mc_info['tipo_microciclo']
+            
+            print(f"  🎨 Asignando colores para {mc_info['jornada']} (tipo: {tipo})")
+            
+            if tipo == 'especial':
+                # Sin umbrales, color gris
+                for metrica in metricas:
+                    if acumulados[metrica][mc_id].get('acumulado') is not None:
+                        acumulados[metrica][mc_id]['color'] = 'gris'
+                    else:
+                        # Asegurarse de que tenga color aunque sea None
+                        acumulados[metrica][mc_id]['color'] = 'gris'
+                continue
+            
+            # Obtener configuración de umbrales para este tipo
+            config = get_metricas_config_por_tipo(tipo)
+            
+            for config_metrica in config:
+                metrica_id = config_metrica['id']
+                if metrica_id not in metricas:
+                    continue
+                
+                min_umbral = config_metrica['min']
+                max_umbral = config_metrica['max']
+                acumulado_val = acumulados[metrica_id][mc_id].get('acumulado')
+                
+                if acumulado_val is None:
+                    color = 'gris'
+                elif acumulado_val < min_umbral:
+                    color = 'rojo_claro'  # Por debajo del mínimo
+                elif acumulado_val <= max_umbral:
+                    color = 'verde'  # Dentro del rango
+                else:
+                    color = 'rojo_oscuro'  # Por encima del máximo
+                
+                # Formatear valor para logging
+                valor_str = f"{acumulado_val:.1f}" if acumulado_val is not None else "N/A"
+                print(f"    • {metrica_id}: {valor_str}% -> {color} (min:{min_umbral}, max:{max_umbral})")
+                
+                acumulados[metrica_id][mc_id].update({
+                    'color': color,
+                    'min_umbral': min_umbral,
+                    'max_umbral': max_umbral
+                })
+        
+        print(f"  ✅ Acumulados calculados para {len(microciclos_info)} microciclos")
+        
+        return {
+            'microciclos': microciclos_info,
+            'acumulados': acumulados,
+            'jugadores_ids': jugadores_ids  # Para cálculo de compensatorios
+        }
+        
+    except Exception as e:
+        print(f"  ❌ Error cargando tabla evolutiva: {e}")
+        import traceback
+        traceback.print_exc()
+        return None

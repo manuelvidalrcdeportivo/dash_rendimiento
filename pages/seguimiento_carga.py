@@ -124,6 +124,379 @@ def get_metricas_config_por_tipo(tipo_microciclo):
             {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 60, 'max': 80, 'tipo': 'media'}
         ]
 
+def generar_tabla_evolutiva(datos_evolutivos):
+    """
+    Genera el componente visual de la tabla evolutiva de microciclos.
+    
+    Args:
+        datos_evolutivos: Dict con 'microciclos' y 'acumulados' de cargar_tabla_evolutiva_microciclos()
+    
+    Returns:
+        Componente Dash con la tabla
+    """
+    if not datos_evolutivos or not datos_evolutivos.get('microciclos'):
+        return html.Div("No hay datos disponibles para la tabla evolutiva", 
+                       className="text-muted text-center p-4")
+    
+    microciclos = datos_evolutivos['microciclos']
+    acumulados = datos_evolutivos['acumulados']
+    jugadores_ids = datos_evolutivos.get('jugadores_ids', None)  # IDs de jugadores usados
+    
+    # Métricas a mostrar
+    metricas = [
+        {'id': 'total_distance', 'label': 'Distancia Total (%)'},
+        {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h (%)'},
+        {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h (%)'},
+        {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (%)'},
+        {'id': 'ritmo_medio', 'label': 'Ritmo Medio (%)'}
+    ]
+    
+    # Calcular valores de compensatorio (MD+1/MD+2) para cada microciclo
+    # IMPORTANTE: Usar los mismos jugadores_ids que el resto de la tabla
+    from pages.seguimiento_carga_ultra_optimizado import obtener_compensatorios_tabla
+    compensatorios = obtener_compensatorios_tabla(microciclos, jugadores_ids=jugadores_ids)
+    
+    # Mapeo de colores
+    color_map = {
+        'verde': '#d4edda',  # Verde claro
+        'rojo_claro': '#f8d7da',  # Rojo claro
+        'rojo_oscuro': '#e74c3c',  # Rojo oscuro
+        'gris': '#e9ecef'  # Gris
+    }
+    
+    color_text_map = {
+        'verde': '#155724',
+        'rojo_claro': '#721c24',
+        'rojo_oscuro': '#ffffff',
+        'gris': '#6c757d'
+    }
+    
+    # Crear encabezados de columnas (microciclos completos)
+    headers = [
+        html.Th("", style={
+            'backgroundColor': '#1e3d59',
+            'color': 'white',
+            'padding': '12px 8px',
+            'fontSize': '13px',
+            'fontWeight': '600',
+            'textAlign': 'left',
+            'borderRight': '1px solid #dee2e6',
+            'position': 'sticky',
+            'left': 0,
+            'zIndex': 10
+        })
+    ]
+    
+    # Calcular % de semanas en verde por métrica
+    porcentajes_verde = {}
+    for metrica in metricas:
+        metrica_id = metrica['id']
+        total_microciclos = len(microciclos)
+        verdes = sum(1 for mc in microciclos if acumulados[metrica_id].get(mc['id'], {}).get('color') == 'verde')
+        porcentaje = (verdes / total_microciclos * 100) if total_microciclos > 0 else 0
+        porcentajes_verde[metrica_id] = {
+            'verdes': verdes,
+            'total': total_microciclos,
+            'porcentaje': porcentaje
+        }
+    
+    for mc in microciclos:
+        # Mostrar jornada en primera línea y label simplificado en segunda
+        headers.append(
+            html.Th(
+                html.Div([
+                    html.Div(mc['jornada'], style={
+                        'fontWeight': '700', 
+                        'fontSize': '15px',
+                        'marginBottom': '3px'
+                    }),
+                    html.Div(mc['label'], style={
+                        'fontSize': '8px', 
+                        'fontWeight': '300',
+                        'lineHeight': '1.1',
+                        'whiteSpace': 'normal',
+                        'wordBreak': 'break-word',
+                        'maxHeight': '30px',
+                        'overflow': 'hidden'
+                    })
+                ]), 
+                style={
+                    'backgroundColor': '#1e3d59',
+                    'color': 'white',
+                    'padding': '8px 4px',
+                    'fontSize': '11px',
+                    'textAlign': 'center',
+                    'borderRight': '1px solid #dee2e6',
+                    'minWidth': '100px',
+                    'maxWidth': '120px',
+                    'cursor': 'pointer',
+                    'verticalAlign': 'middle'
+                }, 
+                id={'type': 'tabla-evolutiva-header', 'microciclo_id': mc['id']},
+                n_clicks=0,  # Necesario para que sea clickeable
+                title=mc['label']  # Tooltip con el nombre
+            )
+        )
+    
+    # Añadir columna % Cumplimiento al final (NO sticky, después de la última semana)
+    headers.append(
+        html.Th("% Cumplimiento", style={
+            'backgroundColor': '#1e3d59',
+            'color': 'white',
+            'padding': '8px 4px',
+            'fontSize': '12px',
+            'fontWeight': '700',
+            'textAlign': 'center',
+            'borderRight': '1px solid #dee2e6',
+            'minWidth': '110px'
+        })
+    )
+    
+    # Crear fila de Tipo de Microciclo
+    tipo_cells = [
+        html.Td("Tipo Microciclo", style={
+            'backgroundColor': '#f8f9fa',
+            'padding': '10px 8px',
+            'fontSize': '12px',
+            'fontWeight': '600',
+            'color': '#1e3d59',
+            'borderRight': '1px solid #dee2e6',
+            'position': 'sticky',
+            'left': 0,
+            'zIndex': 5
+        })
+    ]
+    
+    tipo_label_map = {
+        'estandar': 'Estándar',
+        'extendido': 'Extendido',
+        'reducido': 'Recortado',
+        'superrecortado': 'Super Recortado',
+        'especial': 'Especial'
+    }
+    
+    for mc in microciclos:
+        tipo = mc['tipo_microciclo']
+        tipo_cells.append(
+            html.Td(tipo_label_map.get(tipo, 'N/A'), style={
+                'padding': '6px 4px',
+                'fontSize': '10px',
+                'textAlign': 'center',
+                'backgroundColor': '#f1f3f5',
+                'color': '#495057',
+                'fontWeight': '600',
+                'borderRight': '1px solid #dee2e6',
+                'lineHeight': '1.2'
+            }, id={'type': 'tabla-evolutiva-tipo', 'microciclo_id': mc['id']})
+        )
+    
+    # Celda vacía en fila de tipo para columna % Cumplimiento
+    tipo_cells.append(
+        html.Td("—", style={
+            'padding': '6px 4px',
+            'fontSize': '10px',
+            'textAlign': 'center',
+            'backgroundColor': '#1e3d59',
+            'color': 'white',
+            'fontWeight': '600',
+            'borderRight': '1px solid #dee2e6'
+        })
+    )
+    
+    # Crear filas de métricas
+    filas_metricas = []
+    
+    for metrica in metricas:
+        metrica_id = metrica['id']
+        metrica_label = metrica['label']
+        
+        cells = [
+            html.Td(metrica_label, style={
+                'backgroundColor': '#f8f9fa',
+                'padding': '10px 8px',
+                'fontSize': '12px',
+                'fontWeight': '600',
+                'color': '#1e3d59',
+                'borderRight': '1px solid #dee2e6',
+                'position': 'sticky',
+                'left': 0,
+                'zIndex': 5
+            })
+        ]
+        
+        for mc in microciclos:
+            mc_id = mc['id']
+            datos_celda = acumulados[metrica_id].get(mc_id, {})
+            
+            acumulado_val = datos_celda.get('acumulado')
+            color = datos_celda.get('color', 'gris')
+            
+            # Generar texto de la celda
+            if acumulado_val is not None:
+                texto = f"{acumulado_val:.0f}%"
+            else:
+                texto = "—"
+            
+            # Obtener colores de los mapas
+            bg_color = color_map.get(color, '#e9ecef')
+            text_color = color_text_map.get(color, '#6c757d')
+            
+            cells.append(
+                html.Td(texto, style={
+                    'padding': '8px 6px',
+                    'fontSize': '13px',
+                    'fontWeight': '600',
+                    'textAlign': 'center',
+                    'backgroundColor': bg_color,
+                    'color': text_color,
+                    'borderRight': '1px solid #dee2e6',
+                    'cursor': 'pointer' if acumulado_val is not None else 'default'
+                }, 
+                id={'type': 'tabla-evolutiva-celda', 'microciclo_id': mc_id, 'metrica_id': metrica_id},
+                n_clicks=0  # Necesario para que sea clickeable
+                )
+            )
+        
+        # Añadir celda con % Cumplimiento al final de la fila (color del encabezado)
+        pct_info = porcentajes_verde[metrica_id]
+        cells.append(
+            html.Td(f"{pct_info['porcentaje']:.0f}%", style={
+                'padding': '8px 6px',
+                'fontSize': '13px',
+                'fontWeight': '700',
+                'textAlign': 'center',
+                'backgroundColor': '#1e3d59',
+                'color': 'white',
+                'borderRight': '1px solid #dee2e6'
+            }, title=f"{pct_info['verdes']} de {pct_info['total']} semanas en verde")
+        )
+        
+        filas_metricas.append(html.Tr(cells))
+    
+    # Crear fila de Compensatorio (MD+1 o MD+2)
+    comp_cells = [
+        html.Td("Compensatorio MD+1/+2 (%)", style={
+            'backgroundColor': '#f8f9fa',
+            'padding': '10px 8px',
+            'fontSize': '12px',
+            'fontWeight': '600',
+            'color': '#1e3d59',
+            'borderRight': '1px solid #dee2e6',
+            'position': 'sticky',
+            'left': 0,
+            'zIndex': 5
+        })
+    ]
+    
+    # Calcular % de compensatorios en verde
+    total_compensatorios = len([c for c in compensatorios.values() if c['valor'] is not None])
+    verdes_compensatorios = sum(1 for c in compensatorios.values() if c['color'] == 'verde')
+    pct_comp_verde = (verdes_compensatorios / total_compensatorios * 100) if total_compensatorios > 0 else 0
+    
+    for mc in microciclos:
+        mc_id = mc['id']
+        comp_data = compensatorios.get(mc_id, {})
+        
+        porcentaje_val = comp_data.get('porcentaje')
+        color_comp = comp_data.get('color', 'gris')
+        
+        if porcentaje_val is not None:
+            texto = f"{porcentaje_val:.0f}%"
+        else:
+            texto = "—"
+        
+        # Obtener colores
+        bg_color = color_map.get(color_comp, '#e9ecef')
+        text_color = color_text_map.get(color_comp, '#6c757d')
+        
+        comp_cells.append(
+            html.Td(texto, style={
+                'padding': '8px 6px',
+                'fontSize': '13px',
+                'fontWeight': '600',
+                'textAlign': 'center',
+                'backgroundColor': bg_color,
+                'color': text_color,
+                'borderRight': '1px solid #dee2e6'
+            })
+        )
+    
+    # Añadir celda de % Cumplimiento para compensatorio
+    comp_cells.append(
+        html.Td(f"{pct_comp_verde:.0f}%", style={
+            'padding': '8px 6px',
+            'fontSize': '13px',
+            'fontWeight': '700',
+            'textAlign': 'center',
+            'backgroundColor': '#1e3d59',
+            'color': 'white',
+            'borderRight': '1px solid #dee2e6'
+        }, title=f"{verdes_compensatorios} de {total_compensatorios} compensatorios en rango 55-70%")
+    )
+    
+    filas_metricas.append(html.Tr(comp_cells))
+    
+    # Crear tabla completa
+    tabla = html.Div([
+        html.H5("Evolución de Carga por Microciclo", style={
+            'color': '#1e3d59',
+            'fontWeight': '600',
+            'fontSize': '18px',
+            'marginBottom': '15px'
+        }),
+        html.Div(
+            html.Table([
+                html.Thead(html.Tr(headers)),
+                html.Tbody([
+                    html.Tr(tipo_cells),
+                    *filas_metricas
+                ])
+            ], style={
+                'width': '100%',
+                'borderCollapse': 'collapse',
+                'border': '1px solid #dee2e6',
+                'fontSize': '12px'
+            }),
+            id='tabla-evolutiva-scroll-container',
+            style={
+                'overflowX': 'auto',
+                'maxWidth': '100%',
+                'marginBottom': '10px'
+            }
+        ),
+        # Script para hacer scroll a la derecha automáticamente
+        html.Script('''
+            setTimeout(function() {
+                var container = document.getElementById('tabla-evolutiva-scroll-container');
+                if (container) {
+                    container.scrollLeft = container.scrollWidth;
+                }
+            }, 100);
+        '''),
+        html.Div([
+            html.Div([
+                html.Span("Leyenda: ", style={'fontWeight': '600', 'marginRight': '15px'}),
+                html.Span("●", style={'color': color_map['verde'], 'fontSize': '20px', 'marginRight': '5px'}),
+                html.Span("Dentro del rango", style={'marginRight': '15px', 'fontSize': '11px'}),
+                html.Span("●", style={'color': color_map['rojo_claro'], 'fontSize': '20px', 'marginRight': '5px'}),
+                html.Span("Por debajo del mínimo", style={'marginRight': '15px', 'fontSize': '11px'}),
+                html.Span("●", style={'color': color_map['rojo_oscuro'], 'fontSize': '20px', 'marginRight': '5px'}),
+                html.Span("Por encima del máximo", style={'marginRight': '15px', 'fontSize': '11px'}),
+                html.Span("●", style={'color': color_map['gris'], 'fontSize': '20px', 'marginRight': '5px'}),
+                html.Span("Sin datos/Especial", style={'fontSize': '11px'})
+            ], style={'marginBottom': '5px'}),
+            html.Div([
+                html.Span("⚠️ ", style={'marginRight': '5px'}),
+                html.Span("Compensatorio (MD+1 o MD+2): pueden existir errores  por etiquetado Part/Rehab", 
+                         style={'fontSize': '10px', 'fontStyle': 'italic', 'color': '#856404'})
+            ])
+        ], style={'marginTop': '10px', 'color': '#6c757d', 'fontSize': '12px'})
+    ], style={
+        'marginBottom': '25px'
+    })
+    
+    return tabla
+
 # Función para obtener el contenido de "Microciclo Equipo" (contenido actual)
 def get_microciclo_equipo_content(microciclos=None):
     """Contenido de la pestaña Microciclo Equipo - Vista con cacheo de datos"""
@@ -143,6 +516,27 @@ def get_microciclo_equipo_content(microciclos=None):
         dcc.Store(id="sc-date-store", data={}),
         dcc.Store(id="sc-part-rehab-store", data=[]),
         dcc.Store(id="sc-selected-metric", data="total_distance"),
+        dcc.Store(id="sc-tabla-evolutiva-data", data={}),  # Store para datos de tabla evolutiva
+        
+        # TABLA EVOLUTIVA (al inicio, antes del selector)
+        dbc.Card([
+            dbc.CardBody([
+                html.Div(id="sc-tabla-evolutiva-container", children=[
+                    html.Div([
+                        dcc.Loading(
+                            type="circle",
+                            color="#1e3d59",
+                            children=html.Div("Cargando tabla evolutiva...", className="text-center text-muted p-4")
+                        )
+                    ])
+                ])
+            ])
+        ], className="mb-4", style={
+            'backgroundColor': 'white',
+            'borderRadius': '12px',
+            'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
+            'border': 'none'
+        }),
         
         # PASO 1: Selector de Microciclo
         dbc.Card([
@@ -722,10 +1116,9 @@ def load_microciclos_once(current_data):
         try:
             microciclos = get_microciclos_from_processed_table()
             if microciclos:
-                print(f"✅ Microciclos cargados desde tabla intermedia: {len(microciclos)}")
                 return microciclos
         except Exception as e:
-            print(f"⚠️ Error cargando desde tabla intermedia, usando método antiguo: {e}")
+            pass
         
         # Fallback al método antiguo si falla
         microciclos = get_microciclos()
@@ -744,6 +1137,7 @@ def update_sc_microciclo_options(microciclos):
     if not microciclos:
         return [], None
     options = [{'label': mc['label'], 'value': mc['id']} for mc in microciclos]
+    # Seleccionar el primero (más reciente, ya que vienen ordenados DESC)
     default_value = microciclos[0]['id'] if microciclos else None
     return options, default_value
 
@@ -758,6 +1152,7 @@ def update_sj_microciclo_options(microciclos):
     if not microciclos:
         return [], None
     options = [{'label': mc['label'], 'value': mc['id']} for mc in microciclos]
+    # Seleccionar el primero (más reciente, ya que vienen ordenados DESC)
     default_value = microciclos[0]['id'] if microciclos else None
     return options, default_value
 
@@ -1039,11 +1434,8 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
     # Detectar tipo de microciclo (solo si no viene en maximos_historicos)
     if maximos_historicos and 'tipo_microciclo' in maximos_historicos:
         tipo_microciclo = maximos_historicos['tipo_microciclo']
-        print(f"🔍 Tipo de microciclo (desde cache): {tipo_microciclo.upper()}")
     else:
         tipo_microciclo = detectar_tipo_microciclo(dias_ordenados)
-        print(f"🔍 Tipo de microciclo detectado: {tipo_microciclo.upper()}")
-        print(f"   Días presentes: {dias_ordenados}")
     
     # Seleccionar umbrales según tipo
     if tipo_microciclo == 'extendido':
@@ -1278,7 +1670,6 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
         nombre_partido = resultado_raw.get('nombre_partido')
         
         # Generar gráficos de forma ultra-optimizada
-        print("🎨 Generando 6 gráficos (umbrales hardcodeados, 0 queries)...")
         
         # Detectar tipo de microciclo ANTES de generar gráficos (1 sola vez)
         dias_presentes = []
@@ -1288,7 +1679,6 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
                 break
         
         tipo_microciclo = detectar_tipo_microciclo(dias_presentes)
-        print(f"🔍 Tipo de microciclo: {tipo_microciclo.upper()}")
         print(f"   Días presentes: {dias_presentes}")
         
         # Añadir tipo al diccionario de máximos históricos para pasarlo a los gráficos
@@ -1317,9 +1707,7 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
                 )
                 graficos_metricas[metrica] = fig
             except Exception as e:
-                print(f"  ⚠️ Error con {metrica}: {e}")
-        
-        print(f"✅ {len(graficos_metricas)} gráficos generados")
+                pass
         
         # Cache optimizado CON TODAS LAS MÉTRICAS PRE-CARGADAS
         cache_optimizado = {
@@ -1331,8 +1719,6 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
             'tipo_microciclo': tipo_microciclo,  # ← Tipo detectado
             'dias_presentes': dias_presentes  # ← Días disponibles
         }
-        
-        print(f"✅ Microciclo cargado: {len(atletas_df)} atletas, {len(graficos_metricas)} métricas")
         
         # Generar timestamp único para trigger
         import time
@@ -1372,10 +1758,7 @@ def cargar_metrica_inicial(loaded_timestamp, cache_data):
     fig = graficos.get('total_distance', {})
     
     if fig:
-        print(f"📊 Mostrando métrica inicial: Distancia Total (desde cache)")
         return fig, "total_distance", {'display': 'block'}
-    
-    print(f"⚠️ No se encontró total_distance en cache")
     return {}, "total_distance", {'display': 'none'}
 
 # Callback para cambiar entre métricas usando botones (carga on-demand con cache inteligente)
@@ -1435,8 +1818,6 @@ def actualizar_estilos_botones(metrica_actual):
         'ritmo_medio'
     ]
     
-    print(f"🎨 Actualizando estilos botones. Métrica actual: {metrica_actual}")
-    
     estilos = []
     for metrica in metricas_list:
         if metrica == metrica_actual:
@@ -1472,6 +1853,144 @@ def actualizar_estilos_botones(metrica_actual):
     
     return estilos
 
+# Callback para cargar tabla evolutiva al inicio
+@callback(
+    Output("sc-tabla-evolutiva-container", "children"),
+    Output("sc-tabla-evolutiva-data", "data"),
+    Input("sc-microciclo-dropdown", "id"),  # Trigger inicial
+    State("sc-date-store", "data"),
+    prevent_initial_call=False  # Cargar automáticamente al inicio
+)
+def cargar_tabla_evolutiva_inicial(_, date_data):
+    """
+    Carga la tabla evolutiva de todos los microciclos al inicio.
+    Usa la misma lógica de jugadores que Seguimiento de Carga:
+    - Excluye porteros
+    - Solo jugadores Full (participation_type)
+    """
+    try:
+        from pages.seguimiento_carga_ultra_optimizado import cargar_tabla_evolutiva_microciclos
+        from utils.db_manager import get_db_connection
+        import pandas as pd
+        
+        print("🔄 Cargando tabla evolutiva de microciclos...")
+        
+        # Obtener jugadores REALES que participaron en microciclos (sin porteros)
+        # IMPORTANTE: Usar los mismos jugadores que usa el gráfico (df_raw['athlete_id'].unique())
+        engine = get_db_connection()
+        
+        query_jugadores_activos = '''
+            SELECT DISTINCT athlete_id
+            FROM microciclos_metricas_procesadas
+            WHERE athlete_position != 'Goal Keeper'
+              AND activity_date >= '2024-08-01'
+        '''
+        
+        df_jugadores = pd.read_sql(query_jugadores_activos, engine)
+        engine.dispose()
+        
+        if df_jugadores.empty:
+            return (
+                html.Div("No hay jugadores disponibles", 
+                        className="text-muted text-center p-4"),
+                {}
+            )
+        
+        jugadores_ids = df_jugadores['athlete_id'].tolist()
+        
+        print(f"🎯 Jugadores ACTIVOS sin porteros: {len(jugadores_ids)}")
+        print(f"🎯 (Solo jugadores que realmente participaron en entrenamientos)")
+        
+        # Cargar datos de todos los microciclos con los mismos jugadores
+        datos_evolutivos = cargar_tabla_evolutiva_microciclos(jugadores_ids=jugadores_ids)
+        
+        if not datos_evolutivos:
+            return (
+                html.Div("No se pudieron cargar los datos evolutivos", 
+                        className="text-muted text-center p-4"),
+                {}
+            )
+        
+        # Generar componente visual
+        tabla = generar_tabla_evolutiva(datos_evolutivos)
+        
+        return tabla, datos_evolutivos
+        
+    except Exception as e:
+        print(f"❌ Error cargando tabla evolutiva: {e}")
+        import traceback
+        traceback.print_exc()
+        return (
+            html.Div(f"Error al cargar tabla evolutiva: {str(e)}", 
+                    className="text-danger text-center p-4"),
+            {}
+        )
+
+# Callback para interactividad: click en celda → cambiar dropdown Y cargar datos
+@callback(
+    Output("sc-microciclo-dropdown", "value", allow_duplicate=True),
+    Output("sc-cargar-microciclo-btn", "n_clicks", allow_duplicate=True),
+    Input({'type': 'tabla-evolutiva-celda', 'microciclo_id': ALL, 'metrica_id': ALL}, 'n_clicks'),
+    Input({'type': 'tabla-evolutiva-header', 'microciclo_id': ALL}, 'n_clicks'),
+    State({'type': 'tabla-evolutiva-celda', 'microciclo_id': ALL, 'metrica_id': ALL}, 'id'),
+    State({'type': 'tabla-evolutiva-header', 'microciclo_id': ALL}, 'id'),
+    State("sc-cargar-microciclo-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def cambiar_microciclo_desde_tabla(clicks_celdas, clicks_headers, ids_celdas, ids_headers, current_n_clicks):
+    """
+    Cambia el microciclo seleccionado Y dispara la carga de datos cuando se hace click en la tabla evolutiva.
+    """
+    print("🔵 Callback cambiar_microciclo_desde_tabla ejecutándose...")
+    
+    ctx = dash.callback_context
+    
+    if not ctx.triggered:
+        print("   ❌ No hay triggered")
+        raise PreventUpdate
+    
+    # Obtener qué elemento disparó el callback
+    triggered_prop = ctx.triggered[0]['prop_id']
+    triggered_value = ctx.triggered[0]['value']
+    print(f"   📍 Triggered: {triggered_prop}")
+    print(f"   📍 Value: {triggered_value}")
+    
+    # Si n_clicks es None, es porque el componente no tenía n_clicks=0 inicialmente
+    # Pero aún así queremos procesarlo si el usuario hizo click
+    # Solo ignorar si es la carga inicial de la página (todos los valores son None)
+    if triggered_value is None and all(c is None for c in clicks_celdas + clicks_headers):
+        print("   ❌ Carga inicial de página (todos None)")
+        raise PreventUpdate
+    
+    triggered_id = triggered_prop.split('.')[0]
+    
+    if not triggered_id:
+        raise PreventUpdate
+    
+    try:
+        import json
+        # Intentar parsear el JSON del ID
+        try:
+            triggered_dict = json.loads(triggered_id)
+        except json.JSONDecodeError:
+            # Si falla por caracteres especiales, intentar con ast.literal_eval
+            import ast
+            triggered_dict = ast.literal_eval(triggered_id)
+        
+        microciclo_id = triggered_dict.get('microciclo_id')
+        
+        if microciclo_id:
+            # Incrementar n_clicks para disparar la carga de datos
+            new_n_clicks = (current_n_clicks or 0) + 1
+            return microciclo_id, new_n_clicks
+        
+    except Exception as e:
+        print(f"⚠️ Error parseando ID de celda: {e}")
+        print(f"   triggered_id: {triggered_id}")
+        raise PreventUpdate
+    
+    raise PreventUpdate
+
 # Callback para generar barras de progreso de TODAS las métricas
 @callback(
     Output("sc-progress-bar-container", "children"),
@@ -1487,11 +2006,8 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
     if not loaded_timestamp or not cache_data or not cache_data.get('cargado'):
         return html.Div()
     
-    print(f"🎯 Generando barras desde cache (SIN queries adicionales)")
-    
     # Obtener tipo de microciclo del cache
     tipo_microciclo = cache_data.get('tipo_microciclo', 'estandar')
-    print(f"📊 Usando configuración para microciclo {tipo_microciclo.upper()}")
     
     # Configuración de métricas con umbrales según tipo de microciclo
     metricas_config = get_metricas_config_por_tipo(tipo_microciclo)
@@ -1536,6 +2052,7 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
             
             # Extraer valores de las barras del gráfico
             valores_entrenamientos = []
+            valores_absolutos = []  # Para logging
             for trace in fig.get('data', []):
                 dia = trace.get('name', '').split(' ')[0]  # Quitar porcentaje si existe
                 if dia and dia.startswith('MD-'):
@@ -1544,6 +2061,7 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
                     if valor and valor > 0 and max_historico and max_historico > 0:
                         porcentaje = (valor / max_historico) * 100
                         valores_entrenamientos.append(porcentaje)
+                        valores_absolutos.append(valor)
                         entrenamientos_con_porcentaje.append({
                             'nombre': dia,
                             'porcentaje': porcentaje,
@@ -1695,13 +2213,9 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
             
             # Añadir barra a la lista
             barras_html.append(barra_metrica)
-            print(f"  ✓ Barra creada para {config['label']} - Acumulado: {acumulado_total:.0f}%")
             
         except Exception as e:
-            print(f"  ✗ Error con {config['label']}: {e}")
             continue
-    
-    print(f"✅ {len(barras_html)} barras generadas desde cache")
     
     # Retornar todas las barras
     if barras_html:
@@ -1826,7 +2340,6 @@ def generar_grafico_desde_tabla_intermedia(microciclo_id, metric, atleta_ids_fil
             if maximos_precalculados and metric in maximos_precalculados:
                 max_historico_md = maximos_precalculados[metric]['max']
                 min_historico_md = maximos_precalculados[metric]['min']
-                print(f"✅ Usando máximos precalculados: MAX={max_historico_md:.1f}, MIN={min_historico_md:.1f}")
         
         # Añadir cada día como barra
         for idx, row in df_summary.iterrows():
@@ -2646,8 +3159,6 @@ def cargar_microciclo_jugadores(n_clicks, microciclo_id):
     # Seleccionar primer jugador por defecto
     primer_jugador = jugadores_options[0]['value'] if jugadores_options else None
     
-    print(f"✅ Microciclo cargado: {len(jugadores_options)} jugadores disponibles")
-    
     # Cachear datos del microciclo (serializar DataFrames)
     datos_serializados = {}
     for metrica, df in resultado['datos_por_metrica'].items():
@@ -2716,15 +3227,11 @@ def toggle_indicadores_part_rehab_jugadores(incluir_part_rehab, cache_data):
 )
 def cargar_datos_jugador(athlete_id, incluir_part_rehab, cache_data):
     """Carga datos del jugador y genera contenido completo (IGUAL que Microciclo Equipo)"""
-    if not athlete_id or not cache_data:
-        return [html.Div([
-            html.P("Selecciona un jugador para ver el análisis", 
-                   className="text-center text-muted",
+    if not cache_data or not cache_data.get('microciclo_id'):
+        return (html.Div([
+            html.P("⚠️ No hay microciclo cargado", className="text-muted text-center",
                    style={'padding': '40px', 'fontSize': '14px'})
-        ])], {}, False
-    
-    print(f"🎨 Cargando análisis para jugador: {athlete_id}")
-    print(f"  📋 Checkbox Part/Rehab: {incluir_part_rehab}")
+        ]), {}, False)
     
     # Obtener nombre del jugador
     atletas_df = get_cached_athletes()
@@ -2736,7 +3243,6 @@ def cargar_datos_jugador(athlete_id, incluir_part_rehab, cache_data):
     
     # Obtener fecha del MD del microciclo (para buscar hacia atrás)
     df_raw = pd.DataFrame(cache_data.get('df_raw', []))
-    print(f"  📊 Total registros antes de filtrar: {len(df_raw)}")
     
     # Filtrar por Part/Rehab si es necesario
     excluir_part_rehab = 'incluir' not in incluir_part_rehab
@@ -2754,21 +3260,16 @@ def cargar_datos_jugador(athlete_id, incluir_part_rehab, cache_data):
             (df_raw['participation_type'].isna()) | 
             (~df_raw['participation_type'].isin(['Part', 'Rehab']))
         ]
-        print(f"  ✅ Total registros después de filtrar: {len(df_raw)}")
-    else:
-        print(f"  ℹ️ Incluyendo Part/Rehab (no se filtra)")
     
     # Filtrar datos del jugador (IGUAL QUE MICROCICLO EQUIPO)
     df_jugador = df_raw[df_raw['athlete_id'] == athlete_id].copy()
     
     if df_jugador.empty:
-        return [html.Div([
+        return (html.Div([
             html.P(f"No hay datos disponibles para {nombre_jugador} en este microciclo", 
                    className="text-center text-muted",
                    style={'padding': '40px', 'fontSize': '14px'})
-        ])], {}, False
-    
-    print(f"📊 Datos jugador: {len(df_jugador)} registros")
+        ]), {}, False)
     
     # Obtener fecha del MD del microciclo actual
     fecha_md_actual = None
@@ -2779,9 +3280,6 @@ def cargar_datos_jugador(athlete_id, incluir_part_rehab, cache_data):
     # IMPORTANTE: Para calcular máximos, usar fecha del MD (se INCLUYE como <= en la query)
     # Igual que Microciclo Equipo: MD actual + 3 anteriores = últimos 4 MDs
     fecha_referencia_maximos = fecha_md_actual
-    
-    print(f"📅 MD del microciclo: {fecha_md_actual}")
-    print(f"📊 Calculando máximos individuales: MD actual + 3 anteriores (últimos 4 MDs)")
     
     # Obtener nombre del partido del MD del microciclo actual (IGUAL QUE MICROCICLO EQUIPO)
     nombre_partido_md = None
@@ -2834,7 +3332,6 @@ def cargar_datos_jugador(athlete_id, incluir_part_rehab, cache_data):
                 df_partidos_fallback = pd.read_sql(query_fallback, engine)
                 
                 if not df_partidos_fallback.empty:
-                    print(f"  ✅ Encontrados {len(df_partidos_fallback)} partidos +70' históricos")
                     
                     # Guardar info de partidos considerados
                     partidos_considerados = [
@@ -4190,18 +4687,15 @@ def generar_grafico_semana_jugadores(start_date, end_date, metric, atleta_ids_fi
 def cargar_estadisticas_md(n_clicks):
     """Carga y muestra estadísticas de cargas máximas en partidos MD"""
     
-    print("DEBUG: Callback cargar_estadisticas_md ejecutándose...")
     
     try:
         # Obtener datos (ahora desde agosto 2025)
         df = calcular_estadisticas_md_jugadores('2025-08-15')
-        print(f"DEBUG: Datos obtenidos. Shape: {df.shape if not df.empty else 'EMPTY'}")
         
         if df.empty:
             return (html.Div("No hay datos disponibles para el análisis. Verifica que haya actividades MD desde agosto 2025.", 
                             className="text-center text-muted p-4"), {})
     except Exception as e:
-        print(f"ERROR en calcular_estadisticas_md_jugadores: {e}")
         import traceback
         traceback.print_exc()
         return (html.Div(f"Error al cargar datos: {str(e)}", 
