@@ -1111,6 +1111,41 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
                 showlegend=True
             ))
     
+    # UMBRALES PARA COMPENSATORIOS (MD+X): 55%-70% para todas las métricas
+    if max_historico_md and max_historico_md > 0:
+        for idx, dia in enumerate(dias_ordenados):
+            # Detectar si es compensatorio (MD+1, MD+2, MD+3, etc.)
+            if re.match(r'^MD\+\d+$', dia):
+                # Umbrales fijos: 55%-70% del máximo histórico
+                min_val_comp = max_historico_md * 0.55
+                max_val_comp = max_historico_md * 0.70
+                
+                # Rectángulo de rango recomendado (color diferente para distinguir)
+                fig.add_shape(
+                    type="rect",
+                    x0=idx-0.4, x1=idx+0.4,
+                    y0=min_val_comp, y1=max_val_comp,
+                    fillcolor="rgba(173, 216, 230, 0.3)",  # Azul claro
+                    line=dict(width=0),
+                    layer="below"
+                )
+                
+                # Línea máximo (azul)
+                fig.add_shape(
+                    type="line",
+                    x0=idx-0.4, x1=idx+0.4,
+                    y0=max_val_comp, y1=max_val_comp,
+                    line=dict(color="rgba(70, 130, 180, 0.9)", width=3),  # Azul acero
+                )
+                
+                # Línea mínimo (azul)
+                fig.add_shape(
+                    type="line",
+                    x0=idx-0.4, x1=idx+0.4,
+                    y0=min_val_comp, y1=min_val_comp,
+                    line=dict(color="rgba(70, 130, 180, 0.9)", width=3),  # Azul acero
+                )
+    
     # Añadir línea naranja del máximo SOBRE el MD
     if max_historico_md and 'MD' in dias_ordenados:
         try:
@@ -1919,6 +1954,41 @@ def generar_grafico_desde_tabla_intermedia(microciclo_id, metric, atleta_ids_fil
                         marker=dict(size=10, color='rgba(255, 0, 0, 0.9)'),
                         name='Mínimo recomendado'
                     ))
+        
+        # UMBRALES PARA COMPENSATORIOS (MD+X): 55%-70% para todas las métricas
+        if max_historico_md and max_historico_md > 0:
+            for idx, dia in enumerate(dias_ordenados):
+                # Detectar si es compensatorio (MD+1, MD+2, MD+3, etc.)
+                if re.match(r'^MD\+\d+$', dia):
+                    # Umbrales fijos: 55%-70% del máximo histórico
+                    min_val_comp = max_historico_md * 0.55
+                    max_val_comp = max_historico_md * 0.70
+                    
+                    # Rectángulo de rango recomendado (color diferente para distinguir)
+                    fig.add_shape(
+                        type="rect",
+                        x0=idx-0.4, x1=idx+0.4,
+                        y0=min_val_comp, y1=max_val_comp,
+                        fillcolor="rgba(173, 216, 230, 0.3)",  # Azul claro
+                        line=dict(width=0),
+                        layer="below"
+                    )
+                    
+                    # Línea máximo (azul)
+                    fig.add_shape(
+                        type="line",
+                        x0=idx-0.4, x1=idx+0.4,
+                        y0=max_val_comp, y1=max_val_comp,
+                        line=dict(color="rgba(70, 130, 180, 0.9)", width=3),  # Azul acero
+                    )
+                    
+                    # Línea mínimo (azul)
+                    fig.add_shape(
+                        type="line",
+                        x0=idx-0.4, x1=idx+0.4,
+                        y0=min_val_comp, y1=min_val_comp,
+                        line=dict(color="rgba(70, 130, 180, 0.9)", width=3),  # Azul acero
+                    )
         
         # AÑADIR LÍNEA NARANJA MÁXIMO DE ÚLTIMOS 4 MDs (referencia para %)
         # Solo mostrar el máximo, no el mínimo

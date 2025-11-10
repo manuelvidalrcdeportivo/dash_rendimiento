@@ -1421,6 +1421,28 @@ def get_microciclo_data_processed(microciclo_id, metric_name, athlete_ids=None,
         
         df = pd.read_sql(query, engine, params=tuple(params))
         
+        # FILTRO ADICIONAL: Los compensatorios (MD+X) SIEMPRE deben filtrar Part/Rehab
+        # independientemente del parámetro exclude_part_rehab
+        if not df.empty and 'activity_tag' in df.columns:
+            import re
+            # Identificar compensatorios
+            df['es_compensatorio'] = df['activity_tag'].apply(
+                lambda x: bool(re.match(r'^MD\+\d+$', str(x)))
+            )
+            
+            # Filtrar compensatorios: solo participation_type Full (NULL o no Part/Rehab)
+            df_filtrado = df[
+                (~df['es_compensatorio']) |
+                (
+                    df['es_compensatorio'] & 
+                    (df['participation_type'].isna() | 
+                     ~df['participation_type'].isin(['Part', 'Rehab']))
+                )
+            ].copy()
+            
+            # Eliminar columna temporal
+            df = df_filtrado.drop(columns=['es_compensatorio'])
+        
         return df
         
     except Exception as e:
@@ -1529,6 +1551,10 @@ def get_microciclo_metrics_summary(microciclo_id, metric_name, athlete_ids=None,
         
         if exclude_part_rehab:
             query += " AND (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab'))"
+        
+        # COMPENSATORIOS (MD+X): SIEMPRE filtrar Part/Rehab independientemente del parámetro
+        # Solo aplicar a compensatorios con patrón MD+número
+        query += " AND (activity_tag NOT REGEXP '^MD\\\\+[0-9]+$' OR (participation_type IS NULL OR participation_type NOT IN ('Part', 'Rehab')))"
         
         if exclude_goalkeepers:
             query += " AND athlete_position != 'Goal Keeper'"

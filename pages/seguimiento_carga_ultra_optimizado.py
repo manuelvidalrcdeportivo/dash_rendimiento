@@ -236,10 +236,33 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
     datos_por_metrica = {}
     
     # Crear DataFrame filtrado para ENTRENAMIENTOS (solo jugadores seleccionados)
+    # Separar compensatorios (MD+X) de entrenamientos normales (MD-X)
     df_entrenamientos = df_microciclo[
         (df_microciclo['activity_tag'] != 'MD') & 
         (df_microciclo['athlete_id'].isin(jugadores_ids))
     ].copy()
+    
+    # COMPENSATORIOS (MD+X): Filtrar Part/Rehab - solo Full
+    # Identificar compensatorios por patrón MD+X
+    df_entrenamientos['es_compensatorio'] = df_entrenamientos['activity_tag'].apply(
+        lambda x: bool(re.match(r'^MD\+\d+$', str(x)))
+    )
+    
+    # Filtrar compensatorios: solo participation_type Full (NULL o no Part/Rehab)
+    df_entrenamientos_filtrado = df_entrenamientos[
+        (~df_entrenamientos['es_compensatorio']) |
+        (
+            df_entrenamientos['es_compensatorio'] & 
+            (df_entrenamientos['participation_type'].isna() | 
+             ~df_entrenamientos['participation_type'].isin(['Part', 'Rehab']))
+        )
+    ].copy()
+    
+    print(f"  ℹ️ Entrenamientos antes filtro compensatorio: {len(df_entrenamientos)} registros")
+    print(f"  ℹ️ Entrenamientos después filtro compensatorio: {len(df_entrenamientos_filtrado)} registros")
+    
+    # Reemplazar df_entrenamientos con la versión filtrada
+    df_entrenamientos = df_entrenamientos_filtrado.drop(columns=['es_compensatorio'])
     
     # DataFrame para MD (TODOS los jugadores, solo el primer MD cronológicamente)
     if fecha_md is not None:
@@ -263,6 +286,7 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
             continue
         
         # Agrupar ENTRENAMIENTOS (solo jugadores seleccionados)
+        # Ya filtrados los compensatorios por participation_type = Full
         df_metrica_entrenos = df_entrenamientos.groupby('activity_tag').agg({
             col_name: 'mean',
             'athlete_id': 'count',

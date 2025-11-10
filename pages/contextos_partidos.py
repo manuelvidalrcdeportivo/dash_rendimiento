@@ -98,7 +98,7 @@ def get_escudo_path(team_name):
         'Ceuta': 'Ceuta.png',
         
         'Cultural y Deportiva Leonesa': 'Cultural.png',
-        'Cultural': 'Cultural.png'
+        'Cultural Leonesa': 'Cultural.png'
     }
     
     # Buscar en el mapeo
