@@ -43,15 +43,12 @@ def calcular_estadisticas_md_jugadores(inicio_temporada='2025-08-15'):
     STANDARIZATION_TIME = 5640  # 94 minutos en segundos
     
     try:
-        print(f"DEBUG: Iniciando cálculo de estadísticas MD desde {inicio_temporada}")
         engine = get_db_connection()
         if engine is None:
-            print("ERROR: No se pudo conectar a la base de datos")
             return pd.DataFrame()
         
         # Convertir fecha de inicio a timestamp
         inicio_ts = int(datetime.strptime(inicio_temporada, '%Y-%m-%d').timestamp())
-        print(f"DEBUG: Timestamp de inicio: {inicio_ts}")
         
         # Obtener actividades MD desde inicio de temporada
         # Usar una búsqueda más simple para evitar problemas con comillas en LIKE
@@ -80,7 +77,6 @@ def calcular_estadisticas_md_jugadores(inicio_temporada='2025-08-15'):
         df_actividades = df_actividades[df_actividades['es_md']].copy()
         df_actividades = df_actividades[['id', 'start_time', 'name']]  # Solo columnas necesarias
         
-        print(f"DEBUG: Actividades MD encontradas: {len(df_actividades)}")
         
         if df_actividades.empty:
             print("WARNING: No se encontraron actividades MD")
@@ -92,7 +88,6 @@ def calcular_estadisticas_md_jugadores(inicio_temporada='2025-08-15'):
         resultados = []
         
         # Primero obtener field_time para todos los partidos y jugadores
-        print("DEBUG: Obteniendo field_time para filtrar partidos...")
         ids_str = ','.join([f"'{id}'" for id in activity_ids])
         query_field_time = f'''
             SELECT 
@@ -109,7 +104,6 @@ def calcular_estadisticas_md_jugadores(inicio_temporada='2025-08-15'):
         
         # Filtrar solo partidos con más de 70 minutos
         df_field_time_filtered = df_field_time[df_field_time['field_time'] >= MIN_FIELD_TIME].copy()
-        print(f"DEBUG: {len(df_field_time_filtered)} registros con field_time >= 70 mins de {len(df_field_time)} totales")
         
         for metrica in todas_metricas:
             # Construir consulta con IDs entrecomillados (son UUIDs/strings)
@@ -125,7 +119,6 @@ def calcular_estadisticas_md_jugadores(inicio_temporada='2025-08-15'):
                 AND aam.parameter_value != ''
             '''
             
-            print(f"DEBUG: Procesando métrica {metrica}...")
             df_metrica = pd.read_sql(query_metricas, engine)
             
             if df_metrica.empty:
@@ -138,7 +131,6 @@ def calcular_estadisticas_md_jugadores(inicio_temporada='2025-08-15'):
                 how='inner'  # Solo mantener registros con field_time >= 70 mins
             )
             
-            print(f"DEBUG: {len(df_metrica)} registros con +70 mins para {metrica}")
             
             if df_metrica.empty:
                 continue
@@ -225,7 +217,6 @@ def calcular_estadisticas_md_jugadores(inicio_temporada='2025-08-15'):
             )
             df_resultado = df_resultado.rename(columns={'full_name': 'jugador_nombre', 'position_name': 'posicion'})
         
-        print(f"DEBUG: Resultados finales: {len(df_resultado)} filas, {df_resultado['jugador_nombre'].nunique()} jugadores únicos")
         return df_resultado
         
     except Exception as e:

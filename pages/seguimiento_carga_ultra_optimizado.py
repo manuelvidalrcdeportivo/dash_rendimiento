@@ -47,6 +47,7 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
             distancia_24_kmh,
             acc_dec_total,
             ritmo_medio,
+            distance_per_minute,
             activity_name
         FROM microciclos_metricas_procesadas
         WHERE microciclo_id = '{microciclo_id}'
@@ -129,7 +130,7 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
                 END) as avg_acc_dec,
                 AVG(CASE 
                     WHEN field_time >= 4200 
-                    THEN ritmo_medio
+                    THEN distance_per_minute
                     ELSE NULL 
                 END) as avg_ritmo_medio
             FROM microciclos_metricas_procesadas
@@ -318,12 +319,12 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
             
             if not df_md_filtrado.empty:
                 # Estandarizar a 94 minutos SOLO para distancias y aceleraciones
-                # Ritmo medio NO se estandariza (ya es m/min)
+                # Ritmo medio: usar distance_per_minute en MDs (NO estandarizar)
                 if metric_name in ['total_distance', 'distancia_21_kmh', 'distancia_24_kmh', 'acc_dec_total']:
                     valor_estandarizado = (df_md_filtrado[col_name] * (5640 / df_md_filtrado['field_time'])).mean()
                 else:
-                    # Para ritmo_medio: solo filtrar +70 mins, no estandarizar
-                    valor_estandarizado = df_md_filtrado[col_name].mean()
+                    # Para ritmo_medio: usar distance_per_minute en MDs, no estandarizar
+                    valor_estandarizado = df_md_filtrado['distance_per_minute'].mean()
                 
                 count_filtrado = len(df_md_filtrado['athlete_id'].unique())
                 
@@ -387,16 +388,20 @@ def calcular_maximo_individual_jugador(athlete_id, metric_name, fecha_referencia
         }
     
     # Mapeo de nombres de métricas a columnas de BD
+    # Para ritmo_medio: usamos distance_per_minute en partidos (MD)
     columnas_metricas = {
         'total_distance': 'total_distance',
         'distancia_+21_km/h_(m)': 'distancia_21_kmh',
         'distancia_+24_km/h_(m)': 'distancia_24_kmh',
         'distancia+28_(km/h)': 'distancia_28_kmh',
         'gen2_acceleration_band7plus_total_effort_count': 'acc_dec_total',
-        'average_player_load': 'ritmo_medio'
+        'average_player_load': 'distance_per_minute'  # Cambiado para usar distance_per_minute en MDs
     }
     
     col_name = columnas_metricas.get(metric_name, metric_name)
+    
+    # Determinar si esta métrica debe estandarizarse (NO para ritmo_medio/distance_per_minute)
+    debe_estandarizar = metric_name not in ['average_player_load', 'ritmo_medio']
     
     # Query para obtener últimos 4 MDs con +70 minutos del jugador
     # INCLUIR el MD actual (<=) igual que Microciclo Equipo
@@ -444,8 +449,11 @@ def calcular_maximo_individual_jugador(athlete_id, metric_name, fecha_referencia
                 # Tiene al menos 1 MD +70' en la temporada
                 print(f"  ✅ Encontrados {len(df_temporada)} partidos +70' desde inicio de temporada")
                 
-                # Estandarizar y obtener máximo
-                df_temporada['metric_value_std'] = df_temporada['metric_value'] * (5640 / df_temporada['field_time'])
+                # Estandarizar y obtener máximo (solo si la métrica lo requiere)
+                if debe_estandarizar:
+                    df_temporada['metric_value_std'] = df_temporada['metric_value'] * (5640 / df_temporada['field_time'])
+                else:
+                    df_temporada['metric_value_std'] = df_temporada['metric_value']
                 idx_max = df_temporada['metric_value_std'].idxmax()
                 max_value = df_temporada.loc[idx_max, 'metric_value_std']
                 partido_max = df_temporada.loc[idx_max, 'activity_name']
@@ -491,10 +499,13 @@ def calcular_maximo_individual_jugador(athlete_id, metric_name, fecha_referencia
                     'num_partidos': 0
                 }
             else:
-                # Usar el partido donde jugó más minutos y estandarizar
+                # Usar el partido donde jugó más minutos y estandarizar (solo si la métrica lo requiere)
                 field_time = df_max_min['field_time'].iloc[0]
                 metric_value = df_max_min['metric_value'].iloc[0]
-                valor_std = metric_value * (5640 / field_time)
+                if debe_estandarizar:
+                    valor_std = metric_value * (5640 / field_time)
+                else:
+                    valor_std = metric_value
                 partido = df_max_min['activity_name'].iloc[0]
                 fecha = df_max_min['activity_date'].iloc[0]
                 
@@ -513,8 +524,11 @@ def calcular_maximo_individual_jugador(athlete_id, metric_name, fecha_referencia
         # Tiene al menos 1 MD con +70 minutos
         print(f"  ✅ Jugador {athlete_id}: {len(df)} partidos +70' encontrados")
         
-        # Estandarizar a 94 minutos (5640 segundos)
-        df['metric_value_std'] = df['metric_value'] * (5640 / df['field_time'])
+        # Estandarizar a 94 minutos (5640 segundos) solo si la métrica lo requiere
+        if debe_estandarizar:
+            df['metric_value_std'] = df['metric_value'] * (5640 / df['field_time'])
+        else:
+            df['metric_value_std'] = df['metric_value']
         
         # Obtener el máximo
         idx_max = df['metric_value_std'].idxmax()
@@ -866,7 +880,7 @@ def cargar_tabla_evolutiva_microciclos(jugadores_ids=None):
                 AVG(CASE WHEN field_time >= 4200 THEN distancia_21_kmh * (5640/field_time) END) as max_distancia_21_kmh,
                 AVG(CASE WHEN field_time >= 4200 THEN distancia_24_kmh * (5640/field_time) END) as max_distancia_24_kmh,
                 AVG(CASE WHEN field_time >= 4200 THEN acc_dec_total * (5640/field_time) END) as max_acc_dec_total,
-                AVG(CASE WHEN field_time >= 4200 THEN ritmo_medio END) as max_ritmo_medio
+                AVG(CASE WHEN field_time >= 4200 THEN distance_per_minute END) as max_ritmo_medio
             FROM microciclos_metricas_procesadas
             WHERE activity_tag = 'MD'
               AND athlete_position != 'Goal Keeper'
