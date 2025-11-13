@@ -97,7 +97,7 @@ def get_metricas_config_por_tipo(tipo_microciclo):
             {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 100, 'max': 190, 'tipo': 'suma'},
             {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 90, 'max': 170, 'tipo': 'suma'},
             {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (m/s²)', 'min': 250, 'max': 380, 'tipo': 'suma'},
-            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 60, 'max': 80, 'tipo': 'media'}
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 55, 'max': 75, 'tipo': 'media'}
         ]
     elif tipo_microciclo == 'superrecortado':
         return [
@@ -105,7 +105,7 @@ def get_metricas_config_por_tipo(tipo_microciclo):
             {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 20, 'max': 60, 'tipo': 'suma'},
             {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 20, 'max': 40, 'tipo': 'suma'},
             {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (m/s²)', 'min': 65, 'max': 120, 'tipo': 'suma'},
-            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 40, 'max': 70, 'tipo': 'media'}
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min':40, 'max': 65, 'tipo': 'media'}
         ]
     elif tipo_microciclo == 'reducido':
         return [
@@ -113,7 +113,7 @@ def get_metricas_config_por_tipo(tipo_microciclo):
             {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 70, 'max': 130, 'tipo': 'suma'},
             {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 60, 'max': 100, 'tipo': 'suma'},
             {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (m/s²)', 'min': 115, 'max': 190, 'tipo': 'suma'},
-            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 60, 'max': 80, 'tipo': 'media'}
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 50, 'max': 75, 'tipo': 'media'}
         ]
     else:  # estandar
         return [
@@ -121,7 +121,7 @@ def get_metricas_config_por_tipo(tipo_microciclo):
             {'id': 'distancia_21_kmh', 'label': 'Dist. +21 km/h', 'min': 90, 'max': 160, 'tipo': 'suma'},
             {'id': 'distancia_24_kmh', 'label': 'Dist. +24 km/h', 'min': 80, 'max': 140, 'tipo': 'suma'},
             {'id': 'acc_dec_total', 'label': 'Acel/Decel +3 (m/s²)', 'min': 190, 'max': 290, 'tipo': 'suma'},
-            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 60, 'max': 80, 'tipo': 'media'}
+            {'id': 'ritmo_medio', 'label': 'Ritmo Medio (m/min.)', 'min': 55, 'max': 75, 'tipo': 'media'}
         ]
 
 def generar_tabla_evolutiva(datos_evolutivos):
@@ -1335,10 +1335,10 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
             'MD-1': {'min': 0.3, 'max': 0.55}
         },
         'ritmo_medio': {
-            'MD-4': {'min': 0.50, 'max': 0.80},
-            'MD-3': {'min': 0.50, 'max': 0.80},
-            'MD-2': {'min': 0.30, 'max': 0.60},
-            'MD-1': {'min': 0.20, 'max': 0.50}
+            'MD-4': {'min': 0.65, 'max': 0.80},
+            'MD-3': {'min': 0.70, 'max': 0.90},
+            'MD-2': {'min': .45, 'max': 0.70},
+            'MD-1': {'min': 0.40, 'max': 0.60}
         }
     }
     
@@ -1372,11 +1372,11 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
             'MD-1': {'min': 0.30, 'max': 0.55}
         },
         'ritmo_medio': {
-            'MD-5': {'min': 0.50, 'max': 0.80},
-            'MD-4': {'min': 0.50, 'max': 0.80},
-            'MD-3': {'min': 0.50, 'max': 0.80},
-            'MD-2': {'min': 0.30, 'max': 0.60},
-            'MD-1': {'min': 0.20, 'max': 0.50}
+            'MD-5': {'min': 0.55, 'max': 0.75},
+            'MD-4': {'min': 0.65, 'max': 0.80},
+            'MD-3': {'min': 0.70, 'max': 0.90},
+            'MD-2': {'min': 0.45, 'max': 0.70},
+            'MD-1': {'min': 0.40, 'max': 0.60}
         }
     }
     
@@ -1402,9 +1402,9 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
             'MD-1': {'min': 0.30, 'max': 0.55}
         },
         'ritmo_medio': {
-            'MD-3': {'min': 0.50, 'max': 0.80},
-            'MD-2': {'min': 0.30, 'max': 0.60},
-            'MD-1': {'min': 0.20, 'max': 0.50}
+            'MD-3': {'min': 0.70, 'max': 0.90},
+            'MD-2': {'min': 0.45, 'max': 0.75},
+            'MD-1': {'min': 0.35, 'max': 0.60}
         }
     }
     
@@ -1426,8 +1426,8 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
             'MD-1': {'min': 0.30, 'max': 0.55}
         },
         'ritmo_medio': {
-            'MD-2': {'min': 0.40, 'max': 0.70},
-            'MD-1': {'min': 0.20, 'max': 0.60}
+            'MD-2': {'min': 0.45, 'max': 0.75},
+            'MD-1': {'min': 0.35, 'max': 0.55}
         }
     }
     
