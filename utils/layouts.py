@@ -84,14 +84,14 @@ def dashboard_layout():
                         ),
                         dbc.Collapse([
                             dbc.NavLink(
-                                [html.I(className="fas fa-clipboard-list me-2"), "Sesiones-Microciclos"],
-                                href="/control-proceso-entrenamiento/sesiones-microciclos",
+                                [html.I(className="fas fa-users me-2"), "Entrenamiento Equipo"],
+                                href="/entrenamiento-equipo",
                                 active="exact",
                                 className="py-2 text-white-50 ps-4 small"
                             ),
                             dbc.NavLink(
-                                [html.I(className="fas fa-chart-line me-2"), "Evolutivo Temporada"],
-                                href="/control-proceso-entrenamiento/evolutivo-temporada",
+                                [html.I(className="fas fa-user me-2"), "Entrenamiento Jugadores"],
+                                href="/entrenamiento-jugadores",
                                 active="exact",
                                 className="py-2 text-white-50 ps-4 small"
                             ),

@@ -93,15 +93,15 @@ def get_layout(roles=None):
                         dbc.ListGroup([
                             dbc.ListGroupItem([
                                 dcc.Link([
-                                    html.I(className="fas fa-calendar-week me-2", style={"color": "#6c757d"}),
-                                    "Sesiones-Microciclos"
-                                ], href="/control-proceso-entrenamiento/sesiones-microciclos", className="text-decoration-none", style={"color": "#495057"})
+                                    html.I(className="fas fa-users me-2", style={"color": "#6c757d"}),
+                                    "Entrenamiento Equipo"
+                                ], href="/entrenamiento-equipo", className="text-decoration-none", style={"color": "#495057"})
                             ], action=True),
                             dbc.ListGroupItem([
                                 dcc.Link([
-                                    html.I(className="fas fa-chart-line me-2", style={"color": "#6c757d"}),
-                                    "Evolutivo Temporada"
-                                ], href="/control-proceso-entrenamiento/evolutivo-temporada", className="text-decoration-none", style={"color": "#495057"})
+                                    html.I(className="fas fa-user me-2", style={"color": "#6c757d"}),
+                                    "Entrenamiento Jugadores"
+                                ], href="/entrenamiento-jugadores", className="text-decoration-none", style={"color": "#495057"})
                             ], action=True),
                         ], flush=True)
                     ])
@@ -296,15 +296,15 @@ layout = dbc.Container([
                     dbc.ListGroup([
                         dbc.ListGroupItem([
                             dcc.Link([
-                                html.I(className="fas fa-calendar-week me-2", style={"color": "#6c757d"}),
-                                "Sesiones-Microciclos"
-                            ], href="/control-proceso-entrenamiento/sesiones-microciclos", className="text-decoration-none", style={"color": "#495057"})
+                                html.I(className="fas fa-users me-2", style={"color": "#6c757d"}),
+                                "Entrenamiento Equipo"
+                            ], href="/entrenamiento-equipo", className="text-decoration-none", style={"color": "#495057"})
                         ], action=True),
                         dbc.ListGroupItem([
                             dcc.Link([
-                                html.I(className="fas fa-chart-line me-2", style={"color": "#6c757d"}),
-                                "Evolutivo Temporada"
-                            ], href="/control-proceso-entrenamiento/evolutivo-temporada", className="text-decoration-none", style={"color": "#495057"})
+                                html.I(className="fas fa-user me-2", style={"color": "#6c757d"}),
+                                "Entrenamiento Jugadores"
+                            ], href="/entrenamiento-jugadores", className="text-decoration-none", style={"color": "#495057"})
                         ], action=True),
                     ], flush=True)
                 ])

@@ -29,6 +29,8 @@ from pages.rendimiento_individual import layout as rendimiento_individual_layout
 import pages.contextos_partidos
 import pages.tendencia_resultados
 import pages.competicion_estilo
+from pages.entrenamiento_equipo import layout as entrenamiento_equipo_layout
+from pages.entrenamiento_jugadores import layout as entrenamiento_jugadores_layout
 # Comentamos las páginas que no usaremos por ahora
 # from pages.ficha_jugador import layout as ficha_jugador_layout
 # from pages.postpartido import layout as postpartido_layout
@@ -154,6 +156,16 @@ def display_subpage(pathname, session_data):
         if has_access(["admin", "direccion", "analista", "preparador"]):
             return cpe_evolutivo_layout
         return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
+    elif pathname == "/entrenamiento-equipo":
+        # Nueva página refactorizada: Entrenamiento Equipo (Microciclo Equipo)
+        if has_access(["admin", "direccion", "analista", "preparador"]):
+            return entrenamiento_equipo_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
+    elif pathname == "/entrenamiento-jugadores":
+        # Nueva página refactorizada: Entrenamiento Jugadores (Microciclo Jugadores)
+        if has_access(["admin", "direccion", "analista", "preparador"]):
+            return entrenamiento_jugadores_layout
+        return html.Div("No tienes permisos para acceder a esta sección.", className="p-4 text-danger")
     elif pathname == "/chicha-jugador":
         # Alias de Ficha de Jugador
         if has_access(["admin", "direccion", "analista"]):
@@ -203,8 +215,9 @@ def display_subpage(pathname, session_data):
     State("collapse-cpe", "is_open"),
 )
 def toggle_cpe(n_clicks, pathname, is_open):
-    # Mantener abierta si la URL pertenece a CPE
-    if pathname and pathname.startswith("/control-proceso-entrenamiento"):
+    # Mantener abierta si la URL pertenece a CPE (rutas nuevas y antiguas)
+    if pathname and (pathname.startswith("/control-proceso-entrenamiento") or 
+                    pathname in ["/entrenamiento-equipo", "/entrenamiento-jugadores"]):
         return True
     # Toggle manual por botón
     triggered_prop = (
@@ -233,7 +246,8 @@ def highlight_section_headers(pathname):
     cef_class = base_class
     if pathname and pathname.startswith("/rendimiento-competicion"):
         crc_class = active_class
-    if pathname and pathname.startswith("/control-proceso-entrenamiento"):
+    if pathname and (pathname.startswith("/control-proceso-entrenamiento") or 
+                    pathname in ["/entrenamiento-equipo", "/entrenamiento-jugadores"]):
         cpe_class = active_class
     if pathname and pathname.startswith("/estado-funcional"):
         cef_class = active_class
