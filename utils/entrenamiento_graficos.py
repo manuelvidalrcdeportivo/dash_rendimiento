@@ -36,8 +36,18 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
         'MD': '#0d3b66'
     }
     
-    # Obtener máximos históricos
-    max_historico_md = maximos_historicos.get('max') if maximos_historicos else None
+    # Obtener valor de referencia (máximo o media) según modo
+    # Si existe 'valor_referencia', usarlo directamente (para jugadores)
+    # Si no, usar la lógica de max/media (para equipo)
+    if maximos_historicos and 'valor_referencia' in maximos_historicos:
+        max_historico_md = maximos_historicos.get('valor_referencia')
+    else:
+        modo_referencia = maximos_historicos.get('modo_referencia', 'max') if maximos_historicos else 'max'
+        if modo_referencia == 'media':
+            max_historico_md = maximos_historicos.get('media') if maximos_historicos else None
+        else:
+            max_historico_md = maximos_historicos.get('max') if maximos_historicos else None
+    
     min_historico_md = maximos_historicos.get('min') if maximos_historicos else None
     
     # Crear gráfico
@@ -370,10 +380,15 @@ def generar_grafico_optimizado_precargado(df_summary, metric, metrica_label, max
                 num_partidos = maximos_historicos.get('num_partidos', 0)
                 hover_info = f"{num_partidos} partido{'s' if num_partidos != 1 else ''} +70' en temporada"
             else:
-                # Equipo: promedio últimos 4 MDs
-                partido_max_label = "Máx últimos 4 MDs (100%)"
-                hover_title = "<b>Máximo de últimos 4 MDs</b>"
-                hover_info = "Promedio equipo"
+                # Equipo: máximo o media últimos 4 MDs según modo
+                if modo_referencia == 'media':
+                    partido_max_label = "Media últimos 4 MDs (100%)"
+                    hover_title = "<b>Media de últimos 4 MDs</b>"
+                    hover_info = "Promedio equipo (referencia: media)"
+                else:
+                    partido_max_label = "Máx últimos 4 MDs (100%)"
+                    hover_title = "<b>Máximo de últimos 4 MDs</b>"
+                    hover_info = "Promedio equipo (referencia: máximo)"
             
             # Añadir línea naranja como shape (más visible)
             fig.add_shape(

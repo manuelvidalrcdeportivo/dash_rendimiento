@@ -58,19 +58,76 @@ def get_microciclo_equipo_content(microciclos=None):
         dcc.Store(id="sc-part-rehab-store", data=[]),
         dcc.Store(id="sc-selected-metric", data="total_distance"),
         dcc.Store(id="sc-tabla-evolutiva-data", data={}),  # Store para datos de tabla evolutiva
+        dcc.Store(id="sc-modo-referencia", data='max'),  # Store para modo de referencia (max/media)
+        
+        # SWITCH MODO REFERENCIA (Máximo/Media)
+        dbc.Card([
+            dbc.CardBody([
+                dbc.Row([
+                    dbc.Col([
+                        html.Label("Cálculo de Referencia:", style={
+                            'fontWeight': '600',
+                            'fontSize': '14px',
+                            'color': '#1e3d59',
+                            'marginRight': '15px',
+                            'lineHeight': '36px'
+                        })
+                    ], width='auto'),
+                    dbc.Col([
+                        dbc.ButtonGroup([
+                            dbc.Button(
+                                "Máximo",
+                                id="sc-modo-max-btn",
+                                color="primary",
+                                outline=False,
+                                style={
+                                    'backgroundColor': '#1e3d59',
+                                    'borderColor': '#1e3d59',
+                                    'fontWeight': '600'
+                                }
+                            ),
+                            dbc.Button(
+                                "Media",
+                                id="sc-modo-media-btn",
+                                color="primary",
+                                outline=True,
+                                style={
+                                    'borderColor': '#1e3d59',
+                                    'color': '#1e3d59',
+                                    'fontWeight': '500'
+                                }
+                            )
+                        ], size="sm")
+                    ], width='auto'),
+                    dbc.Col([
+                        html.Small(
+                            "Selecciona si usar el máximo o la media de los últimos 4 partidos (+70') como referencia para calcular porcentajes de carga",
+                            style={
+                                'color': '#6c757d',
+                                'fontStyle': 'italic',
+                                'lineHeight': '36px'
+                            }
+                        )
+                    ])
+                ], align="center")
+            ], style={'padding': '15px 20px'})
+        ], className="mb-3", style={
+            'backgroundColor': '#f8f9fa',
+            'borderRadius': '8px',
+            'border': '1px solid #dee2e6'
+        }),
         
         # TABLA EVOLUTIVA (al inicio, antes del selector)
         dbc.Card([
             dbc.CardBody([
-                html.Div(id="sc-tabla-evolutiva-container", children=[
-                    html.Div([
-                        dcc.Loading(
-                            type="circle",
-                            color="#1e3d59",
-                            children=html.Div("Cargando tabla evolutiva...", className="text-center text-muted p-4")
-                        )
+                dcc.Loading(
+                    id="sc-tabla-evolutiva-loading",
+                    type="circle",
+                    color="#1e3d59",
+                    children=html.Div(id="sc-tabla-evolutiva-container", children=[
+                        html.Div("Cargando tabla evolutiva...", className="text-center text-muted p-4")
                     ])
-                ])
+                )
             ])
         ], className="mb-4", style={
             'backgroundColor': 'white',
@@ -348,25 +405,84 @@ def update_content_with_microciclos(microciclos):
         return get_microciclo_equipo_content(microciclos)
     return get_microciclo_equipo_content([])
 
+
+# Callback para manejar el switch Máximo/Media
+@callback(
+    Output("sc-modo-referencia", "data"),
+    Output("sc-modo-max-btn", "outline"),
+    Output("sc-modo-max-btn", "style"),
+    Output("sc-modo-media-btn", "outline"),
+    Output("sc-modo-media-btn", "style"),
+    Input("sc-modo-max-btn", "n_clicks"),
+    Input("sc-modo-media-btn", "n_clicks"),
+    State("sc-modo-referencia", "data"),
+    prevent_initial_call=True
+)
+def toggle_modo_referencia(n_max, n_media, modo_actual):
+    """Cambia entre modo Máximo y Media y actualiza estilos de botones"""
+    ctx = dash.callback_context
+    
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Determinar nuevo modo
+    if button_id == "sc-modo-max-btn":
+        nuevo_modo = 'max'
+    elif button_id == "sc-modo-media-btn":
+        nuevo_modo = 'media'
+    else:
+        raise PreventUpdate
+    
+    # No hacer nada si ya estamos en ese modo
+    if nuevo_modo == modo_actual:
+        raise PreventUpdate
+    
+    # Estilos según modo seleccionado
+    if nuevo_modo == 'max':
+        # Máximo activo
+        return (
+            'max',
+            False,  # Max no outline (relleno)
+            {'backgroundColor': '#1e3d59', 'borderColor': '#1e3d59', 'fontWeight': '600'},
+            True,   # Media outline (borde)
+            {'borderColor': '#1e3d59', 'color': '#1e3d59', 'fontWeight': '500'}
+        )
+    else:
+        # Media activo
+        return (
+            'media',
+            True,   # Max outline (borde)
+            {'borderColor': '#1e3d59', 'color': '#1e3d59', 'fontWeight': '500'},
+            False,  # Media no outline (relleno)
+            {'backgroundColor': '#1e3d59', 'borderColor': '#1e3d59', 'fontWeight': '600'}
+        )
+
     
 # Callback para cargar tabla evolutiva al inicio
 @callback(
     Output("sc-tabla-evolutiva-container", "children"),
     Output("sc-tabla-evolutiva-data", "data"),
-    Input("sc-microciclo-dropdown", "value"),  # Trigger cuando se selecciona microciclo
+    Input("microciclos-store", "data"),  # Trigger al cargar microciclos
+    Input("sc-modo-referencia", "data"),  # Recargar cuando cambia modo
     State("sc-date-store", "data"),
-    prevent_initial_call=False  # Permitir carga cuando dropdown recibe valor por defecto
+    prevent_initial_call=False
 )
-def cargar_tabla_evolutiva_inicial(microciclo_id, date_data):
+def cargar_tabla_evolutiva_inicial(microciclos, modo_referencia, date_data):
     """
     Carga la tabla evolutiva de todos los microciclos al inicio.
     Usa la misma lógica de jugadores que Seguimiento de Carga:
     - Excluye porteros
     - Solo jugadores Full (participation_type)
+    
+    Se recarga SOLO cuando:
+    - Se cargan los microciclos (una vez al inicio)
+    - Se cambia el modo Máximo/Media
     """
-    # Evitar carga si no hay microciclo seleccionado
-    if not microciclo_id:
-        return html.Div("Selecciona un microciclo para ver la tabla evolutiva", 
+    # Evitar carga si no hay microciclos
+    if not microciclos:
+        return html.Div("Cargando microciclos...", 
                        className="text-muted text-center p-4"), {}
     
     try:
@@ -401,9 +517,13 @@ def cargar_tabla_evolutiva_inicial(microciclo_id, date_data):
         
         print(f"🎯 Jugadores ACTIVOS sin porteros: {len(jugadores_ids)}")
         print(f"🎯 (Solo jugadores que realmente participaron en entrenamientos)")
+        print(f"📊 Modo de referencia: {'MÁXIMO' if modo_referencia == 'max' else 'MEDIA'} de últimos 4 partidos")
         
-        # Cargar datos de todos los microciclos con los mismos jugadores
-        datos_evolutivos = cargar_tabla_evolutiva_microciclos(jugadores_ids=jugadores_ids)
+        # Cargar datos de todos los microciclos con los mismos jugadores Y modo de referencia
+        datos_evolutivos = cargar_tabla_evolutiva_microciclos(
+            jugadores_ids=jugadores_ids, 
+            modo_referencia=modo_referencia
+        )
         
         if not datos_evolutivos:
             return (
@@ -476,20 +596,37 @@ def cambiar_microciclo_desde_tabla(clicks_celdas, clicks_headers, ids_celdas, id
     Output("sc-microciclo-loaded", "data"),
     Output("sc-metricas-container", "style"),
     Input("sc-cargar-microciclo-btn", "n_clicks"),
+    Input("sc-modo-referencia", "data"),  # NUEVO: Recargar cuando cambia el modo
     State("sc-microciclo-dropdown", "value"),
     State("sc-date-store", "data"),
     prevent_initial_call=True
 )
-def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
+def cargar_microciclo_completo(n_clicks, modo_referencia, microciclo_id, date_data):
     """
     OPTIMIZADO: Carga datos desde tabla intermedia.
     Fallback a método antiguo si la tabla no está disponible.
     Sin filtros de jugadores - usa lógica fija (sin porteros, sin Part/Rehab)
+    
+    Se ejecuta cuando:
+    1. Se hace click en "Cargar microciclo"
+    2. Se cambia el modo Máximo/Media (solo si ya hay un microciclo cargado)
     """
+    import dash
+    ctx = dash.callback_context
+    
     if not microciclo_id:
         return {}, False, {'display': 'none'}
     
+    # Verificar qué activó el callback
+    if ctx.triggered:
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        
+        # Si fue el cambio de modo pero no hay botón click aún, no hacer nada
+        if trigger_id == 'sc-modo-referencia' and not n_clicks:
+            raise PreventUpdate
+    
     print(f"🔄 Cargando microciclo: {microciclo_id}")
+    print(f"   Modo: {'MÁXIMO' if modo_referencia == 'max' else 'MEDIA'}")
     
     # MÉTODO OPTIMIZADO: Usar tabla intermedia
     try:
@@ -533,14 +670,22 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
         
         tipo_microciclo = detectar_tipo_microciclo(dias_presentes)
         print(f"   Días presentes: {dias_presentes}")
+        print(f"   Modo referencia: {'MÁXIMO' if modo_referencia == 'max' else 'MEDIA'}")
         
-        # Añadir tipo al diccionario de máximos históricos para pasarlo a los gráficos
+        # Añadir tipo y modo de referencia al diccionario de máximos históricos para pasarlo a los gráficos
         ultimos_4_mds_con_tipo = {}
         for metrica, datos in ultimos_4_mds_por_metrica.items():
             if datos:
-                ultimos_4_mds_con_tipo[metrica] = {**datos, 'tipo_microciclo': tipo_microciclo}
+                ultimos_4_mds_con_tipo[metrica] = {
+                    **datos, 
+                    'tipo_microciclo': tipo_microciclo,
+                    'modo_referencia': modo_referencia  # NUEVO: pasar modo
+                }
             else:
-                ultimos_4_mds_con_tipo[metrica] = {'tipo_microciclo': tipo_microciclo}
+                ultimos_4_mds_con_tipo[metrica] = {
+                    'tipo_microciclo': tipo_microciclo,
+                    'modo_referencia': modo_referencia  # NUEVO: pasar modo
+                }
         
         # Obtener parámetros una sola vez (no 6 veces)
         parametros = get_available_parameters()
@@ -568,7 +713,7 @@ def cargar_microciclo_completo(n_clicks, microciclo_id, date_data):
             'jugadores_ids': jugadores_ids,
             'cargado': True,
             'graficos': graficos_metricas,  # ← TODAS las figuras listas
-            'maximos_historicos': ultimos_4_mds_por_metrica,  # ← Máximos precalculados
+            'maximos_historicos': ultimos_4_mds_con_tipo,  # ← Máximos CON tipo y modo_referencia
             'tipo_microciclo': tipo_microciclo,  # ← Tipo detectado
             'dias_presentes': dias_presentes  # ← Días disponibles
         }
@@ -837,8 +982,14 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
             entrenamientos_con_porcentaje = []
             acumulado_total = 0
             
-            # Obtener máximo histórico del cache
-            max_historico = maximos_historicos.get(metric_id, {}).get('max')
+            # Obtener valor de referencia (máximo o media) según modo
+            datos_metrica = maximos_historicos.get(metric_id, {})
+            modo_ref = datos_metrica.get('modo_referencia', 'max')
+            
+            if modo_ref == 'media':
+                max_historico = datos_metrica.get('media')
+            else:
+                max_historico = datos_metrica.get('max')
             
             # Determinar si es métrica de suma o media
             es_media = config.get('tipo') == 'media'

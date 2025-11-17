@@ -70,7 +70,65 @@ def get_microciclo_jugadores_content(microciclos=None, jugadores=None):
         dcc.Store(id="scj-tabla-evolutiva-data", data={}),  # Store para datos de tabla evolutiva
         dcc.Store(id="scj-tabla-evolutiva-cache", data={}),  # Caché de datos evolutivos por jugador
         dcc.Store(id="scj-maximos-jugador-cache", data={}),  # Caché de máximos por jugador (absolutos)
-        dcc.Store(id="scj-jugador-seleccionado", data=default_jugador),  # Store para jugador seleccionado,
+        dcc.Store(id="scj-jugador-seleccionado", data=default_jugador),  # Store para jugador seleccionado
+        dcc.Store(id="scj-modo-referencia", data="max"),  # Store para modo de referencia (max o media)
+        
+        # SWITCHER MÁXIMO/MEDIA
+        dbc.Card([
+            dbc.CardBody([
+                dbc.Row([
+                    dbc.Col([
+                        html.Label("Cálculo de Referencia:", style={
+                            'fontWeight': '600',
+                            'fontSize': '14px',
+                            'color': '#1e3d59',
+                            'marginRight': '15px',
+                            'lineHeight': '36px'
+                        })
+                    ], width='auto'),
+                    dbc.Col([
+                        dbc.ButtonGroup([
+                            dbc.Button(
+                                "Máximo",
+                                id="scj-btn-max",
+                                color="primary",
+                                outline=False,
+                                style={
+                                    'backgroundColor': '#1e3d59',
+                                    'borderColor': '#1e3d59',
+                                    'fontWeight': '600'
+                                }
+                            ),
+                            dbc.Button(
+                                "Media",
+                                id="scj-btn-media",
+                                color="primary",
+                                outline=True,
+                                style={
+                                    'borderColor': '#1e3d59',
+                                    'color': '#1e3d59',
+                                    'fontWeight': '500'
+                                }
+                            )
+                        ], size="sm")
+                    ], width='auto'),
+                    dbc.Col([
+                        html.Small(
+                            "Selecciona si usar el máximo o la media de los partidos (+70') como referencia para calcular porcentajes de carga",
+                            style={
+                                'color': '#6c757d',
+                                'fontStyle': 'italic',
+                                'lineHeight': '36px'
+                            }
+                        )
+                    ])
+                ], align="center")
+            ], style={'padding': '15px 20px'})
+        ], className="mb-3", style={
+            'backgroundColor': '#f8f9fa',
+            'borderRadius': '8px',
+            'border': '1px solid #dee2e6'
+        }),
         
         # SELECTOR DE JUGADOR (PRIMERO - Filtra toda la vista)
         dbc.Card([
@@ -301,65 +359,6 @@ def get_microciclo_jugadores_content(microciclos=None, jugadores=None):
         'border': 'none'
     }),
     
-    # Card con explicación y tabla de partidos (SIEMPRE VISIBLE)
-    dbc.Card([
-        dbc.CardBody([
-            # Sección explicativa
-            dbc.Row([
-                dbc.Col([
-                    dbc.Alert([
-                        html.H5([
-                            html.I(className="fas fa-info-circle me-2"),
-                            "Cálculo de Máximos Individuales"
-                        ], style={'fontSize': '16px', 'fontWeight': '600', 'marginBottom': '15px'}),
-                        
-                        html.Div([
-                            html.P([
-                                html.Strong("📊 Referencia 100% = "),
-                                "Mejor marca personal de la temporada (partidos +70')"
-                            ], style={'marginBottom': '8px', 'fontSize': '14px'}),
-                            
-                            html.P([
-                                html.Strong("⏱️ Partidos considerados: "),
-                                html.Span(id="scj-info-partidos", style={'fontStyle': 'italic', 'color': '#0066cc'})
-                            ], style={'marginBottom': '8px', 'fontSize': '14px'}),
-                            
-                            html.P([
-                                html.Strong("📈 Valor máximo: "),
-                                html.Span(id="scj-info-maximo", style={'fontStyle': 'italic', 'color': '#0066cc'})
-                            ], style={'marginBottom': '8px', 'fontSize': '14px'}),
-                            
-                            html.P([
-                                html.Strong("🔄 Estandarización: "),
-                                "Todos los valores → 94 minutos"
-                            ], style={'marginBottom': '8px', 'fontSize': '14px'}),
-                            
-                            html.P([
-                                html.Strong("📉 Carga semanal: "),
-                                "Entrenamientos = % del máximo (sin Part/Rehab)"
-                            ], style={'marginBottom': '0', 'fontSize': '14px'}),
-                        ])
-                    ], color="info", style={
-                        'marginBottom': '20px',
-                        'borderLeft': '4px solid #17a2b8'
-                    })
-                ], width=12)
-            ]),
-            
-            # Tabla de partidos considerados
-            dbc.Row([
-                dbc.Col([
-                    html.Div(id="scj-tabla-partidos-container")
-                ], width=12)
-            ])
-        ])
-    ], className="mb-4", style={
-        'backgroundColor': 'white',
-        'borderRadius': '12px',
-        'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
-        'border': 'none'
-    }),
-    
     # Botón para mostrar/ocultar datos detallados
     dbc.Row([
         dbc.Col([
@@ -432,13 +431,14 @@ def get_microciclo_jugadores_content(microciclos=None, jugadores=None):
     Output("scj-tabla-evolutiva-data", "data"),
     Output("scj-tabla-evolutiva-cache", "data"),
     Input("scj-jugador-selector", "value"),
+    Input("scj-modo-referencia", "data"),  # Recargar cuando cambia modo
     State("scj-tabla-evolutiva-cache", "data"),
     prevent_initial_call=True  # Evitar carga automática innecesaria
 )
-def cargar_tabla_evolutiva_jugador(jugador_id, cache_evolutivo):
+def cargar_tabla_evolutiva_jugador(jugador_id, modo_referencia, cache_evolutivo):
     """
     Carga la tabla evolutiva de UN SOLO JUGADOR con caché.
-    Se ejecuta al cargar la página y cuando el usuario cambia de jugador.
+    Se ejecuta al cargar la página y cuando el usuario cambia de jugador o modo.
     """
     if not jugador_id or jugador_id == '':
         return (
@@ -450,16 +450,20 @@ def cargar_tabla_evolutiva_jugador(jugador_id, cache_evolutivo):
     
     # Verificar caché primero
     cache_evolutivo = cache_evolutivo or {}
+    cache_key = f"{jugador_id}_{modo_referencia}"
     
-    if jugador_id in cache_evolutivo:
-        datos_cached = cache_evolutivo[jugador_id]
+    if cache_key in cache_evolutivo:
+        datos_cached = cache_evolutivo[cache_key]
         tabla = generar_tabla_evolutiva(datos_cached)
         return tabla, datos_cached, cache_evolutivo
     
     # Caché MISS: cargar desde BD
     
     try:
-        datos_evolutivos = cargar_tabla_evolutiva_microciclos(jugadores_ids=[jugador_id])
+        datos_evolutivos = cargar_tabla_evolutiva_microciclos(
+            jugadores_ids=[jugador_id],
+            modo_referencia=modo_referencia  # NUEVO: Pasar modo
+        )
         
         if not datos_evolutivos:
             return (
@@ -472,7 +476,7 @@ def cargar_tabla_evolutiva_jugador(jugador_id, cache_evolutivo):
         tabla = generar_tabla_evolutiva(datos_evolutivos)
         
         # Guardar en caché
-        cache_evolutivo[jugador_id] = datos_evolutivos
+        cache_evolutivo[cache_key] = datos_evolutivos
         
         return tabla, datos_evolutivos, cache_evolutivo
         
@@ -488,6 +492,60 @@ def cargar_tabla_evolutiva_jugador(jugador_id, cache_evolutivo):
 # CALLBACK ELIMINADO: cargar_tabla_inicial
 # Era redundante y causaba cargas innecesarias. 
 # El callback principal cargar_tabla_evolutiva_jugador ya maneja la carga inicial.
+
+
+# Callback para toggle entre Máximo y Media
+@callback(
+    Output("scj-modo-referencia", "data"),
+    Output("scj-btn-max", "outline"),
+    Output("scj-btn-max", "style"),
+    Output("scj-btn-media", "outline"),
+    Output("scj-btn-media", "style"),
+    Input("scj-btn-max", "n_clicks"),
+    Input("scj-btn-media", "n_clicks"),
+    State("scj-modo-referencia", "data"),
+    prevent_initial_call=True
+)
+def toggle_modo_referencia(n_max, n_media, modo_actual):
+    """Cambia entre modo Máximo y Media y actualiza estilos de botones"""
+    ctx = callback_context
+    
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Determinar nuevo modo
+    if button_id == "scj-btn-max":
+        nuevo_modo = 'max'
+    elif button_id == "scj-btn-media":
+        nuevo_modo = 'media'
+    else:
+        raise PreventUpdate
+    
+    # No hacer nada si ya estamos en ese modo
+    if nuevo_modo == modo_actual:
+        raise PreventUpdate
+    
+    # Estilos según modo seleccionado
+    if nuevo_modo == 'max':
+        # Máximo activo
+        return (
+            'max',
+            False,  # Max no outline (relleno)
+            {'backgroundColor': '#1e3d59', 'borderColor': '#1e3d59', 'fontWeight': '600'},
+            True,   # Media outline (borde)
+            {'borderColor': '#1e3d59', 'color': '#1e3d59', 'fontWeight': '500'}
+        )
+    else:
+        # Media activo
+        return (
+            'media',
+            True,   # Max outline (borde)
+            {'borderColor': '#1e3d59', 'color': '#1e3d59', 'fontWeight': '500'},
+            False,  # Media no outline (relleno)
+            {'backgroundColor': '#1e3d59', 'borderColor': '#1e3d59', 'fontWeight': '600'}
+        )
 
 
 # Callback para cambiar microciclo desde tabla evolutiva (click en celdas)
@@ -550,6 +608,9 @@ def generar_info_maximo(metrica, cache_data):
     fecha_max = max_info.get('fecha_max')
     num_partidos = max_info.get('num_partidos', 0)
     max_valor = max_info.get('max')
+    media_valor = max_info.get('media')
+    valor_referencia = max_info.get('valor_referencia', max_valor)  # Usar valor según modo
+    modo_ref = max_info.get('modo_referencia', 'max')
     warning = max_info.get('warning')
     
     # Formatear fecha
@@ -575,15 +636,17 @@ def generar_info_maximo(metrica, cache_data):
         'ritmo_medio': 'Ritmo Medio'
     }
     
+    modo_texto = "Máximo" if modo_ref == 'max' else "Media"
+    
     return html.Div([
         html.Div([
             html.I(className="fas fa-trophy me-2", style={'color': '#ffc107'}),
-            html.Strong("Máximo Histórico:", style={'color': '#495057'}),
-            html.Span(f" {max_valor:.1f}" if max_valor else " N/A", style={'color': '#1e3d59', 'fontWeight': '600', 'marginLeft': '8px'})
+            html.Strong(f"{modo_texto} de Referencia:", style={'color': '#495057'}),
+            html.Span(f" {valor_referencia:.1f}" if valor_referencia else " N/A", style={'color': '#1e3d59', 'fontWeight': '600', 'marginLeft': '8px'})
         ], style={'marginBottom': '8px'}),
         html.Div([
             html.I(className="fas fa-futbol me-2", style={'color': '#28a745'}),
-            html.Strong("Partido:", style={'color': '#495057'}),
+            html.Strong("Partido máximo:", style={'color': '#495057'}),
             html.Span(f" {partido_max}", style={'marginLeft': '8px'})
         ], style={'marginBottom': '8px'}),
         html.Div([
@@ -606,6 +669,7 @@ def generar_info_maximo(metrica, cache_data):
     Output("scj-metricas-container", "style"),
     Output("scj-maximos-jugador-cache", "data"),
     Input("scj-cargar-microciclo-btn", "n_clicks"),
+    Input("scj-modo-referencia", "data"),  # Recargar cuando cambia modo
     State("scj-microciclo-dropdown", "value"),
     State("scj-jugador-selector", "value"),
     State("scj-tabla-evolutiva-data", "data"),  # ✅ Datos de la tabla
@@ -613,7 +677,7 @@ def generar_info_maximo(metrica, cache_data):
     State("scj-date-store", "data"),
     prevent_initial_call=True
 )
-def cargar_microciclo_jugador(n_clicks, microciclo_id, jugador_id, datos_tabla, cache_maximos, date_data):
+def cargar_microciclo_jugador(n_clicks, modo_referencia, microciclo_id, jugador_id, datos_tabla, cache_maximos, date_data):
     """
     Carga datos de UN SOLO JUGADOR en el microciclo seleccionado.
     ♻️ REUTILIZA máximos ya calculados en la tabla (optimizado).
@@ -637,9 +701,12 @@ def cargar_microciclo_jugador(n_clicks, microciclo_id, jugador_id, datos_tabla, 
         
         cache_maximos = cache_maximos or {}
         
+        # Clave de caché incluye modo_referencia para invalidar cuando cambia
+        cache_key = f"{jugador_id}_{modo_referencia}"
+        
         # Verificar si ya tenemos los máximos en caché
-        if jugador_id in cache_maximos:
-            ultimos_4_mds_por_metrica = cache_maximos[jugador_id]
+        if cache_key in cache_maximos:
+            ultimos_4_mds_por_metrica = cache_maximos[cache_key]
         else:
             # Caché MISS: Calcular máximos
             ultimos_4_mds_por_metrica = {}
@@ -651,17 +718,18 @@ def cargar_microciclo_jugador(n_clicks, microciclo_id, jugador_id, datos_tabla, 
                 'ritmo_medio': 'average_player_load'
             }
             
-            # Calcular todos los máximos
+            # Calcular todos los máximos CON modo_referencia
             for metrica_dash, metrica_bd in metricas_a_calcular.items():
                 max_individual = calcular_maximo_individual_jugador(
                     jugador_id, 
                     metrica_bd, 
-                    None  # Sin fecha = máximo absoluto
+                    None,  # Sin fecha = máximo absoluto
+                    modo_referencia  # NUEVO: Pasar modo
                 )
                 ultimos_4_mds_por_metrica[metrica_dash] = max_individual
             
             # Guardar en caché
-            cache_maximos[jugador_id] = ultimos_4_mds_por_metrica
+            cache_maximos[cache_key] = ultimos_4_mds_por_metrica
         
         # Generar gráficos de forma ultra-optimizada
         
@@ -851,204 +919,6 @@ def actualizar_estilos_botones(metrica_actual):
     return estilos
 
 
-# Callback para generar tabla de partidos considerados
-@callback(
-    Output("scj-tabla-partidos-container", "children"),
-    Input("scj-microciclo-loaded", "data"),
-    State("scj-microciclo-cache", "data"),
-    State("scj-selected-metric", "data"),
-    prevent_initial_call=True
-)
-def generar_tabla_partidos(loaded_timestamp, cache_data, metrica_actual):
-    """Genera tabla con todos los partidos considerados para el cálculo de máximos"""
-    if not loaded_timestamp or not cache_data or not cache_data.get('cargado'):
-        return html.Div()
-    
-    # Obtener máximos históricos del cache
-    maximos_historicos = cache_data.get('maximos_historicos', {})
-    
-    # Usar la métrica actual o la primera disponible
-    metrica_key = metrica_actual if metrica_actual else 'total_distance'
-    
-    if metrica_key not in maximos_historicos:
-        return html.Div()
-    
-    maximo_info = maximos_historicos[metrica_key]
-    partidos_detalle = maximo_info.get('partidos_detalle', [])
-    
-    if not partidos_detalle:
-        return html.Div([
-            html.P([
-                html.I(className="fas fa-info-circle me-2"),
-                "No hay información de partidos disponible para este jugador."
-            ], style={
-                'color': '#6c757d',
-                'fontStyle': 'italic',
-                'marginTop': '10px'
-            })
-        ])
-    
-    # Crear tabla
-    from datetime import datetime
-    
-    tabla_rows = []
-    for partido in partidos_detalle:
-        fecha = partido['fecha']
-        nombre = partido['partido']
-        minutos = partido['minutos']
-        valor_metrica = partido.get('valor_metrica', 0)
-        candidato = partido['candidato']
-        
-        # Formatear fecha
-        try:
-            if isinstance(fecha, str):
-                fecha_obj = datetime.strptime(str(fecha).split()[0], '%Y-%m-%d')
-                fecha_formatted = fecha_obj.strftime('%d/%m')
-            else:
-                fecha_formatted = str(fecha)
-        except:
-            fecha_formatted = str(fecha)
-        
-        # Determinar estado y color
-        if minutos >= 70:
-            estado = "✅ SÍ"
-            color_fondo = "#d4edda"  # Verde claro
-            color_texto = "#155724"
-            valor_std = valor_metrica * (5640 / (minutos * 60)) if minutos > 0 else 0
-        elif minutos > 0:
-            estado = "❌ NO"
-            color_fondo = "#fff3cd"  # Amarillo claro
-            color_texto = "#856404"
-            valor_std = 0
-        else:
-            estado = "❌ NO"
-            color_fondo = "#f8d7da"  # Rojo claro
-            color_texto = "#721c24"
-            valor_std = 0
-        
-        tabla_rows.append(
-            html.Tr([
-                html.Td(fecha_formatted, style={'padding': '10px', 'borderBottom': '1px solid #dee2e6', 'fontSize': '13px'}),
-                html.Td(nombre, style={'padding': '10px', 'borderBottom': '1px solid #dee2e6', 'fontWeight': '500', 'fontSize': '13px'}),
-                html.Td(f"{minutos:.0f}'", style={'padding': '10px', 'borderBottom': '1px solid #dee2e6', 'textAlign': 'center', 'fontSize': '13px', 'fontWeight': '600'}),
-                html.Td(f"{valor_std:.0f}m" if valor_std > 0 else "-", style={
-                    'padding': '10px',
-                    'borderBottom': '1px solid #dee2e6',
-                    'textAlign': 'center',
-                    'fontSize': '13px',
-                    'fontWeight': '600',
-                    'color': '#0066cc' if valor_std > 0 else '#999'
-                }),
-                html.Td(estado, style={
-                    'padding': '10px',
-                    'borderBottom': '1px solid #dee2e6',
-                    'textAlign': 'center',
-                    'backgroundColor': color_fondo,
-                    'color': color_texto,
-                    'fontWeight': '600',
-                    'fontSize': '13px'
-                })
-            ])
-        )
-    
-    tabla = html.Table([
-        html.Thead(
-            html.Tr([
-                html.Th("Fecha", style={'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderBottom': '2px solid #dee2e6', 'fontWeight': '600', 'fontSize': '13px'}),
-                html.Th("Partido", style={'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderBottom': '2px solid #dee2e6', 'fontWeight': '600', 'fontSize': '13px'}),
-                html.Th("Min", style={'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderBottom': '2px solid #dee2e6', 'fontWeight': '600', 'textAlign': 'center', 'fontSize': '13px'}),
-                html.Th("Valor (94')", style={'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderBottom': '2px solid #dee2e6', 'fontWeight': '600', 'textAlign': 'center', 'fontSize': '13px'}),
-                html.Th("Usado", style={'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderBottom': '2px solid #dee2e6', 'fontWeight': '600', 'textAlign': 'center', 'fontSize': '13px'})
-            ])
-        ),
-        html.Tbody(tabla_rows)
-    ], style={
-        'width': '100%',
-        'borderCollapse': 'collapse',
-        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
-        'borderRadius': '8px',
-        'overflow': 'hidden',
-        'fontSize': '13px'
-    })
-    
-    return html.Div([
-        html.H6([
-            html.I(className="fas fa-calculator me-2"),
-            "Cálculo del Máximo Individual"
-        ], style={
-            'color': '#1e3d59',
-            'fontWeight': '600',
-            'marginBottom': '12px',
-            'fontSize': '15px'
-        }),
-        tabla
-    ])
-
-
-# Callback para actualizar información de máximos individuales
-@callback(
-    Output("scj-info-partidos", "children"),
-    Output("scj-info-maximo", "children"),
-    Input("scj-microciclo-loaded", "data"),
-    State("scj-microciclo-cache", "data"),
-    State("scj-selected-metric", "data"),
-    prevent_initial_call=True
-)
-def actualizar_info_maximos(loaded_timestamp, cache_data, metrica_actual):
-    """Actualiza la información sobre cómo se calculan los máximos del jugador"""
-    if not loaded_timestamp or not cache_data or not cache_data.get('cargado'):
-        return "Cargando...", "Cargando..."
-    
-    # Obtener máximos históricos del cache
-    maximos_historicos = cache_data.get('maximos_historicos', {})
-    
-    # Usar la métrica actual o la primera disponible
-    metrica_key = metrica_actual if metrica_actual else 'total_distance'
-    
-    if metrica_key in maximos_historicos:
-        maximo_info = maximos_historicos[metrica_key]
-        partido_max = maximo_info.get('partido_max', 'N/A')
-        fecha_max = maximo_info.get('fecha_max', 'N/A')
-        max_val = maximo_info.get('max', 0)
-        num_partidos = maximo_info.get('num_partidos', 0)
-        warning = maximo_info.get('warning', '')
-        
-        # Formatear fecha
-        try:
-            from datetime import datetime
-            if isinstance(fecha_max, str):
-                fecha_obj = datetime.strptime(str(fecha_max).split()[0], '%Y-%m-%d')
-                fecha_formatted = fecha_obj.strftime('%d/%m/%Y')
-            else:
-                fecha_formatted = str(fecha_max)
-        except:
-            fecha_formatted = str(fecha_max)
-        
-        # Información de partidos según el número encontrado
-        if num_partidos >= 4:
-            info_partidos = f"✅ {num_partidos} partidos con +70' encontrados en las últimas 4 jornadas del equipo."
-        elif num_partidos > 0:
-            info_partidos = f"⚠️ Solo {num_partidos} partido(s) con +70' en las últimas 4 jornadas. Se buscó hacia atrás en la temporada."
-        else:
-            info_partidos = "🔴 Sin partidos +70'. Se usa el partido donde jugó más minutos."
-        
-        # Información del máximo
-        if max_val and max_val > 0:
-            info_maximo = f"{max_val:.1f}m en {partido_max} ({fecha_formatted})"
-            
-            # Añadir información adicional si hay warning
-            if warning and '🔴' in warning:
-                info_maximo += " - ⚠️ Referencia limitada: sin partidos +70'"
-            elif num_partidos < 4:
-                info_maximo += f" - ⚠️ Solo {num_partidos} partido(s) +70'"
-        else:
-            info_maximo = "No disponible - Jugador sin datos de partidos"
-        
-        return info_partidos, info_maximo
-    
-    return "Datos no disponibles", "Datos no disponibles"
-
-
 # Callback para mostrar/ocultar tabla detallada
 @callback(
     Output("scj-datos-detallados-container", "style"),
@@ -1180,7 +1050,9 @@ def generar_barras_todas_metricas(loaded_timestamp, cache_data):
             acumulado_total = 0
             
             # Obtener máximo histórico del cache
-            max_historico = maximos_historicos.get(metric_id, {}).get('max')
+            # Usar 'valor_referencia' que ya contiene max o media según el modo seleccionado
+            datos_metrica = maximos_historicos.get(metric_id, {})
+            max_historico = datos_metrica.get('valor_referencia') or datos_metrica.get('max')
             
             # Determinar si es métrica de suma o media
             es_media = config.get('tipo') == 'media'
