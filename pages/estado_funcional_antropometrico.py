@@ -60,77 +60,130 @@ def get_estado_antropometrico_content():
         ], style={"padding": "20px"})
     ])
 
+# Colores para jugadores resaltados
+COLORES_JUGADORES = [
+    '#e74c3c',  # Rojo
+    '#3498db',  # Azul
+    '#2ecc71',  # Verde
+    '#f39c12',  # Naranja
+    '#9b59b6',  # Morado
+    '#1abc9c',  # Turquesa
+    '#e67e22',  # Naranja oscuro
+    '#34495e',  # Gris oscuro
+]
+
+FONT_FAMILY = "Montserrat, sans-serif"
+
 def get_evolutivo_antropometrico_content():
     """Contenido de la pestaña Evolutivo Antropométrico"""
     return html.Div([
         
-        # Controles de filtrado
+        # Controles de filtrado (solo selector de jugadores)
         html.Div([
             dbc.Row([
                 dbc.Col([
-                    html.Label("JUGADOR:", style={"fontWeight": "bold", "color": "#1e3d59", "fontSize": "16px", "fontFamily": "Montserrat, sans-serif"}),
+                    html.Label("SELECCIONAR JUGADORES PARA RESALTAR:", 
+                              style={"fontWeight": "bold", "color": "#1e3d59", "fontSize": "16px", "fontFamily": FONT_FAMILY}),
                     dcc.Dropdown(
-                        id="antropo-player-dd", 
-                        placeholder="Todos los jugadores", 
-                        clearable=False,
-                        style={"marginBottom": "10px", "fontFamily": "Montserrat, sans-serif"}
-                    )
-                ], md=6),
-                dbc.Col([
-                    html.Label("RANGO DE FECHAS:", style={"fontWeight": "bold", "color": "#1e3d59", "fontSize": "16px", "fontFamily": "Montserrat, sans-serif"}),
-                    dcc.DatePickerRange(
-                        id="antropo-date-range", 
-                        display_format="DD/MM/YYYY",
-                        style={"marginBottom": "10px", "fontFamily": "Montserrat, sans-serif"}
-                    )
-                ], md=6)
+                        id="antropo-player-multi-dd", 
+                        placeholder="Selecciona hasta 8 jugadores para resaltar",
+                        multi=True,
+                        style={"fontFamily": FONT_FAMILY}
+                    ),
+                    html.Div([
+                        html.Small("Los jugadores no seleccionados aparecerán en gris tenue. La línea azul oscuro representa la media del equipo.",
+                                  style={"color": "#6c757d", "fontStyle": "italic", "fontFamily": FONT_FAMILY})
+                    ], style={"marginTop": "8px"})
+                ], md=12)
             ], className="mb-3")
         ], style={"padding": "20px", "backgroundColor": "#f8f9fa", "borderRadius": "8px", "margin": "20px", "border": "2px solid #1e3d59"}),
         
-        # Gráficos evolutivos
+        # Botones de selección de métrica (estilo discreto)
         html.Div([
-            # Primera fila: Evolución de Grasa con bandas
-            dbc.Row([
-                dbc.Col([
-                    dcc.Loading(
-                        id="loading-evolucion-grasa",
-                        type="default",
-                        children=[
-                            dcc.Graph(
-                                id="antropo-evolucion-grasa",
-                                style={"height": "500px", "backgroundColor": "transparent"},
-                                config={'displayModeBar': False}
-                            )
-                        ]
-                    )
-                ], md=12)
-            ], className="mb-4"),
-            
-            # Segunda fila: Gráfico combinado Peso Ideal y Pliegues
-            dbc.Row([
-                dbc.Col([
-                    dcc.Loading(
-                        id="loading-combinado",
-                        type="default",
-                        children=[
-                            dcc.Graph(
-                                id="antropo-peso-vs-ideal",
-                                style={"height": "450px", "backgroundColor": "transparent"},
-                                config={'displayModeBar': False}
-                            )
-                        ]
-                    )
-                ], md=12)
-            ], className="mb-3"),
-            
-            # Placeholder oculto para mantener callback structure
             html.Div([
-                dcc.Graph(
-                    id="antropo-evolucion-pliegues",
-                    style={"display": "none"}
+                html.Button(
+                    "% Grasa Corporal",
+                    id="btn-metrica-grasa",
+                    n_clicks=0,
+                    style={
+                        "backgroundColor": "#1e3d59",
+                        "color": "white",
+                        "border": "none",
+                        "borderRadius": "6px",
+                        "padding": "12px 30px",
+                        "fontWeight": "600",
+                        "fontSize": "14px",
+                        "fontFamily": FONT_FAMILY,
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "marginRight": "10px",
+                        "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
+                        "minWidth": "200px"
+                    }
+                ),
+                html.Button(
+                    "Peso Muscular (Lee)",
+                    id="btn-metrica-peso-muscular",
+                    n_clicks=0,
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "color": "#6c757d",
+                        "border": "1px solid #e9ecef",
+                        "borderRadius": "6px",
+                        "padding": "12px 30px",
+                        "fontWeight": "500",
+                        "fontSize": "14px",
+                        "fontFamily": FONT_FAMILY,
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "marginRight": "10px",
+                        "minWidth": "200px"
+                    }
+                ),
+                html.Button(
+                    "Σ 6 Pliegues",
+                    id="btn-metrica-pliegues",
+                    n_clicks=0,
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "color": "#6c757d",
+                        "border": "1px solid #e9ecef",
+                        "borderRadius": "6px",
+                        "padding": "12px 30px",
+                        "fontWeight": "500",
+                        "fontSize": "14px",
+                        "fontFamily": FONT_FAMILY,
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "minWidth": "200px"
+                    }
                 )
-            ], style={"display": "none"}),
-            
+            ], style={
+                "display": "flex",
+                "justifyContent": "center",
+                "alignItems": "center",
+                "padding": "20px 0",
+                "borderBottom": "1px solid #e9ecef"
+            })
+        ], style={
+            "backgroundColor": "white",
+            "marginBottom": "20px"
+        }),
+        
+        # Gráfico evolutivo (un solo gráfico que cambia según selección)
+        html.Div([
+            dbc.Row([
+                dbc.Col([
+                    dcc.Loading(
+                        id="loading-evolucion",
+                        type="default",
+                        color="#1e3d59",
+                        children=[
+                            html.Div(id="antropo-grafico-evolutivo")
+                        ]
+                    )
+                ], md=12)
+            ], className="mb-3")
         ], style={"padding": "20px"})
     ])
 
@@ -578,99 +631,135 @@ def update_antropo_dashboard(current_tab):
                html.Div())
 
 
-# Callback para cargar opciones de jugadores y fechas
+# Callback para cargar opciones de jugadores (multi-select)
 @callback(
-    [
-        Output("antropo-player-dd", "options"),
-        Output("antropo-player-dd", "value"),
-        Output("antropo-date-range", "start_date"),
-        Output("antropo-date-range", "end_date")
-    ],
+    Output("antropo-player-multi-dd", "options"),
     Input("antropo-tab-store", "data"),
     prevent_initial_call=False
 )
-def load_evolutivo_filters(current_tab):
+def load_evolutivo_players(current_tab):
     if current_tab != "evolutivo":
-        return [], None, None, None
+        return []
         
     # Obtener datos de jugadores de primer equipo
     ts = get_cached_anthropometry_data("Primer Equipo", datetime.now().strftime('%Y%m%d%H%M'))
     
     if ts is None or ts.empty:
-        return [{"label": "Todos los jugadores", "value": ALL_VAL}], ALL_VAL, None, None
+        return []
     
-    # Filtrar solo jugadores de primer equipo (aquí puedes agregar lógica específica si tienes campo de categoría)
+    # Obtener jugadores únicos
     players = sorted(ts["player_name"].dropna().unique().tolist())
-    opts = [{"label": "Todos los jugadores", "value": ALL_VAL}] + [{"label": p, "value": p} for p in players]
+    opts = [{"label": p, "value": p} for p in players]
     
-    # Configurar fechas por defecto (últimos 6 meses)
-    ts['fecha'] = pd.to_datetime(ts['fecha'])
-    end_date = ts['fecha'].max()
-    start_date = end_date - pd.DateOffset(months=6)
-    
-    return opts, ALL_VAL, start_date, end_date
+    return opts
 
 
 @callback(
     [
-        Output("antropo-evolucion-grasa", "figure"),
-        Output("antropo-peso-vs-ideal", "figure"),
-        Output("antropo-evolucion-pliegues", "figure")
+        Output("antropo-grafico-evolutivo", "children"),
+        Output("btn-metrica-grasa", "style"),
+        Output("btn-metrica-peso-muscular", "style"),
+        Output("btn-metrica-pliegues", "style")
     ],
     [
-        Input("antropo-player-dd", "value"),
-        Input("antropo-date-range", "start_date"),
-        Input("antropo-date-range", "end_date"),
+        Input("btn-metrica-grasa", "n_clicks"),
+        Input("btn-metrica-peso-muscular", "n_clicks"),
+        Input("btn-metrica-pliegues", "n_clicks"),
+        Input("antropo-player-multi-dd", "value"),
         Input("antropo-tab-store", "data")
     ],
-    prevent_initial_call=True
+    prevent_initial_call=False
 )
-def update_antropo_evolution_charts(player, start_date, end_date, current_tab):
-    """Actualiza los gráficos evolutivos antropométricos"""
+def update_antropo_evolution_chart(n_grasa, n_peso, n_pliegues, selected_players, current_tab):
+    """Actualiza el gráfico evolutivo según la métrica seleccionada"""
+    # Estilos para botones
+    style_active = {
+        "backgroundColor": "#1e3d59",
+        "color": "white",
+        "border": "none",
+        "borderRadius": "6px",
+        "padding": "12px 30px",
+        "fontWeight": "600",
+        "fontSize": "14px",
+        "fontFamily": FONT_FAMILY,
+        "cursor": "pointer",
+        "transition": "all 0.2s ease",
+        "marginRight": "10px",
+        "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
+        "minWidth": "200px"
+    }
+    style_inactive = {
+        "backgroundColor": "#f8f9fa",
+        "color": "#6c757d",
+        "border": "1px solid #e9ecef",
+        "borderRadius": "6px",
+        "padding": "12px 30px",
+        "fontWeight": "500",
+        "fontSize": "14px",
+        "fontFamily": FONT_FAMILY,
+        "cursor": "pointer",
+        "transition": "all 0.2s ease",
+        "marginRight": "10px",
+        "minWidth": "200px"
+    }
+    
     if current_tab != "evolutivo":
-        return _empty_fig("Evolución Grasa"), _empty_fig("Peso y Pliegues"), _empty_fig("Placeholder")
+        empty_msg = html.Div("Carga la pestaña Evolutivo para ver los gráficos", 
+                            style={"textAlign": "center", "padding": "20px", "fontFamily": FONT_FAMILY})
+        return empty_msg, style_active, style_inactive, style_inactive
+    
+    # Determinar qué botón fue presionado
+    ctx = callback_context
+    if not ctx.triggered:
+        metrica_seleccionada = 'pct_grasa'  # Por defecto grasa
+    else:
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        if button_id == 'btn-metrica-peso-muscular':
+            metrica_seleccionada = 'peso_muscular'
+        elif button_id == 'btn-metrica-pliegues':
+            metrica_seleccionada = 'sum_pliegues'
+        else:
+            metrica_seleccionada = 'pct_grasa'
+    
+    # Actualizar estilos de botones
+    style_grasa = style_active if metrica_seleccionada == 'pct_grasa' else style_inactive
+    style_peso = style_active if metrica_seleccionada == 'peso_muscular' else style_inactive
+    style_pliegues = style_active if metrica_seleccionada == 'sum_pliegues' else style_inactive
     
     try:
         # Obtener datos evolutivos
         df = get_cached_anthropometry_data("Primer Equipo", datetime.now().strftime('%Y%m%d%H%M'))
         
         if df is None or df.empty:
-            return _empty_fig("Sin datos"), _empty_fig("Sin datos"), _empty_fig("Sin datos")
+            empty_msg = html.Div("Sin datos disponibles", 
+                                style={"textAlign": "center", "padding": "20px", "fontFamily": FONT_FAMILY})
+            return empty_msg, style_grasa, style_peso, style_pliegues
         
-        # Convertir fecha y filtrar rango
+        # Convertir fecha
         df['fecha'] = pd.to_datetime(df['fecha'])
         
-        if start_date and end_date:
-            start_date = pd.to_datetime(start_date)
-            end_date = pd.to_datetime(end_date)
-            df = df[(df['fecha'] >= start_date) & (df['fecha'] <= end_date)]
+        # Renombrar columna para consistencia
+        if 'player_name' in df.columns:
+            df = df.rename(columns={'player_name': 'nombre'})
         
-        # Filtrar jugador si no es "Todos"
-        if player and player != ALL_VAL:
-            df = df[df['player_name'] == player]
+        # Crear diccionario de jugadores resaltados con colores
+        jugadores_resaltados = {}
+        if selected_players:
+            for i, jugador in enumerate(selected_players[:8]):  # Máximo 8 jugadores
+                jugadores_resaltados[jugador] = COLORES_JUGADORES[i % len(COLORES_JUGADORES)]
         
-        # Filtrar fechas con solo una medición
-        df_valid_dates = df.groupby('fecha').size().reset_index(name='count')
-        valid_dates = df_valid_dates[df_valid_dates['count'] > 1]['fecha'].tolist()
-        df = df[df['fecha'].isin(valid_dates)]
+        # Generar el gráfico según la métrica seleccionada
+        fig = crear_grafico_evolutivo(df, jugadores_resaltados, metrica_seleccionada)
         
-        if df.empty:
-            return _empty_fig("Sin datos para filtros"), _empty_fig("Sin datos para filtros"), _empty_fig("Sin datos para filtros")
-        
-        # ===== GRÁFICO EVOLUCIÓN GRASA CON BANDAS =====
-        fig_grasa = create_grasa_evolution_chart(df, player)
-        
-        # ===== GRÁFICO PESO ACTUAL VS PESO IDEAL =====
-        fig_combinado = create_peso_vs_ideal_chart(df, player)
-        
-        # ===== PLACEHOLDER (PARA MANTENER ESTRUCTURA) =====
-        fig_placeholder = _empty_fig("")
-        
-        return fig_grasa, fig_combinado, fig_placeholder
+        return fig, style_grasa, style_peso, style_pliegues
         
     except Exception as e:
-        print(f"[ERROR] Gráficos evolutivos: {str(e)}")
-        return _empty_fig("Error"), _empty_fig("Error"), _empty_fig("Error")
+        print(f"[ERROR] Gráfico evolutivo: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        error_msg = html.Div(f"Error al cargar gráfico: {str(e)}", 
+                            style={"textAlign": "center", "padding": "20px", "color": "red", "fontFamily": FONT_FAMILY})
+        return error_msg, style_grasa, style_peso, style_pliegues
 
 
 def create_grasa_evolution_chart(df, player):
@@ -756,6 +845,242 @@ def create_grasa_evolution_chart(df, player):
     )
     
     return fig
+
+
+def calcular_media_equipo_temporal(df, metrica):
+    """Calcula la media del equipo agrupando por fecha"""
+    df_media = df.groupby('fecha')[metrica].mean().reset_index()
+    df_media.columns = ['fecha_medicion', 'media']
+    return df_media
+
+
+def crear_grafico_evolutivo(df_evolutivo, jugadores_resaltados, metrica):
+    """
+    Crea gráfico evolutivo con:
+    - Líneas individuales de jugadores en gris tenue
+    - Líneas de jugadores resaltados en sus colores específicos
+    - Línea de media del equipo en azul oscuro destacada
+    """
+    if df_evolutivo.empty or metrica not in df_evolutivo.columns:
+        return html.Div("Sin datos disponibles", style={"textAlign": "center", "padding": "20px", "fontFamily": FONT_FAMILY})
+    
+    # Renombrar columna para consistencia
+    if 'player_name' in df_evolutivo.columns and 'nombre' not in df_evolutivo.columns:
+        df_evolutivo = df_evolutivo.rename(columns={'player_name': 'nombre'})
+    
+    # Asegurar que las fechas sean datetime y filtrar NaT/None
+    df_evolutivo['fecha'] = pd.to_datetime(df_evolutivo['fecha'], errors='coerce')
+    df_evolutivo = df_evolutivo[df_evolutivo['fecha'].notna()]
+    
+    if df_evolutivo.empty:
+        return html.Div("Sin fechas válidas", style={"textAlign": "center", "padding": "20px", "fontFamily": FONT_FAMILY})
+    
+    jugadores_resaltados = jugadores_resaltados or {}
+    
+    fig = go.Figure()
+    
+    # Añadir líneas individuales de jugadores
+    for jugador in sorted(df_evolutivo['nombre'].unique()):
+        df_jugador = df_evolutivo[df_evolutivo['nombre'] == jugador].sort_values('fecha')
+        
+        # Filtrar valores válidos
+        df_jugador_valido = df_jugador[df_jugador[metrica].notna()]
+        
+        # Filtrar valores de 0 en Peso Muscular (Lee)
+        if metrica == 'peso_muscular':
+            df_jugador_valido = df_jugador_valido[df_jugador_valido[metrica] > 0]
+        
+        if not df_jugador_valido.empty:
+            # Verificar si el jugador está resaltado
+            if jugador in jugadores_resaltados:
+                color = jugadores_resaltados[jugador]
+                line_width = 3
+                opacity = 1
+                show_legend = True
+                marker_size = 8
+            else:
+                color = 'rgba(150, 150, 150, 0.3)'  # Gris muy tenue
+                line_width = 1
+                opacity = 1
+                show_legend = False
+                marker_size = 5
+            
+            # Preparar hover text
+            hover_texts = []
+            for _, row in df_jugador_valido.iterrows():
+                fecha_str = pd.to_datetime(row['fecha']).strftime('%d/%m/%Y')
+                
+                # Determinar título de métrica para hover
+                if metrica == 'pct_grasa':
+                    titulo_metrica = '% Grasa Corporal'
+                    valor_str = f"{row[metrica]:.2f}%"
+                elif metrica == 'peso_muscular':
+                    titulo_metrica = 'Peso Muscular (Lee)'
+                    valor_str = f"{row[metrica]:.2f} kg"
+                elif metrica == 'sum_pliegues':
+                    titulo_metrica = 'Σ 6 Pliegues'
+                    valor_str = f"{row[metrica]:.2f} mm"
+                else:
+                    titulo_metrica = metrica
+                    valor_str = f"{row[metrica]:.2f}"
+                
+                hover_texts.append(
+                    f"<b>{jugador}</b><br>" +
+                    f"Fecha: {fecha_str}<br>" +
+                    f"{titulo_metrica}: {valor_str}"
+                )
+            
+            fig.add_trace(go.Scatter(
+                x=df_jugador_valido['fecha'],
+                y=df_jugador_valido[metrica],
+                mode='lines+markers',  # Añadir markers (puntos)
+                name=jugador,
+                line=dict(color=color, width=line_width),
+                marker=dict(size=marker_size, color=color),
+                opacity=opacity,
+                hovertemplate='%{customdata}<extra></extra>',
+                customdata=hover_texts,
+                showlegend=show_legend
+            ))
+    
+    # Calcular y añadir línea de media del equipo (azul oscuro destacada)
+    df_media = calcular_media_equipo_temporal(df_evolutivo, metrica)
+    
+    if not df_media.empty:
+        # Determinar título de métrica para hover de media
+        if metrica == 'pct_grasa':
+            titulo_metrica = '% Grasa Corporal'
+            unidad = '%'
+        elif metrica == 'peso_muscular':
+            titulo_metrica = 'Peso Muscular (Lee)'
+            unidad = 'kg'
+        elif metrica == 'sum_pliegues':
+            titulo_metrica = 'Σ 6 Pliegues'
+            unidad = 'mm'
+        else:
+            titulo_metrica = metrica
+            unidad = ''
+        
+        fig.add_trace(go.Scatter(
+            x=df_media['fecha_medicion'],
+            y=df_media['media'],
+            mode='lines+markers',
+            name='Media del Equipo',
+            line=dict(color='#0d3b66', width=4),  # Azul oscuro, línea gruesa
+            marker=dict(size=8, color='#0d3b66'),
+            hovertemplate=f'<b>Media del Equipo</b><br>Fecha: %{{x|%d/%m/%Y}}<br>{titulo_metrica}: %{{y:.2f}}{unidad}<extra></extra>',
+            showlegend=True
+        ))
+    
+    # Configurar layout y añadir bandas de color para grasa corporal
+    if metrica == 'pct_grasa':
+        titulo_metrica = '% Grasa Corporal'
+        titulo_eje = '% Grasa Corporal'
+        unidad = '%'
+        
+        # Añadir bandas de color (verde: <10%, amarillo: 10-12%, rojo: >12%)
+        # Obtener rango de fechas
+        all_dates = df_evolutivo['fecha'].dropna()
+        if not all_dates.empty:
+            x0 = all_dates.min()
+            x1 = all_dates.max()
+            
+            # Banda verde (< 10%)
+            fig.add_shape(
+                type="rect",
+                x0=x0, x1=x1,
+                y0=0, y1=10,
+                fillcolor="rgba(46, 204, 113, 0.15)",  # Verde tenue
+                line=dict(width=0),
+                layer="below"
+            )
+            
+            # Banda amarilla (10-12%)
+            fig.add_shape(
+                type="rect",
+                x0=x0, x1=x1,
+                y0=10, y1=12,
+                fillcolor="rgba(241, 196, 15, 0.15)",  # Amarillo tenue
+                line=dict(width=0),
+                layer="below"
+            )
+            
+            # Banda roja (> 12%)
+            fig.add_shape(
+                type="rect",
+                x0=x0, x1=x1,
+                y0=12, y1=25,  # Límite superior arbitrario
+                fillcolor="rgba(231, 76, 60, 0.15)",  # Rojo tenue
+                line=dict(width=0),
+                layer="below"
+            )
+            
+    elif metrica == 'peso_muscular':
+        titulo_metrica = 'Peso Muscular'
+        titulo_eje = 'Peso Muscular (Lee)'
+        unidad = 'kg'
+    elif metrica == 'sum_pliegues':
+        titulo_metrica = 'Suma de 6 Pliegues'
+        titulo_eje = 'Suma de 6 Pliegues'
+        unidad = 'mm'
+    else:
+        titulo_metrica = metrica
+        titulo_eje = metrica
+        unidad = ''
+    
+    # Configurar eje Y según métrica
+    yaxis_config = dict(
+        title=dict(text=f"{titulo_eje} ({unidad})" if unidad else titulo_eje, font=dict(family=FONT_FAMILY)),
+        showgrid=True,
+        gridcolor='#f0f0f0',
+        tickfont=dict(family=FONT_FAMILY)
+    )
+    
+    # Ajustar rango del eje Y según métrica
+    if metrica == 'pct_grasa':
+        # Grasa corporal: de 8 a 14 (invertido, 8 arriba)
+        yaxis_config['range'] = [8, 14]
+        yaxis_config['autorange'] = False
+    elif metrica == 'peso_muscular':
+        # Peso muscular: rango automático con margen
+        yaxis_config['autorange'] = True
+        yaxis_config['rangemode'] = 'tozero'
+    elif metrica == 'sum_pliegues':
+        # Suma de pliegues: rango automático
+        yaxis_config['autorange'] = True
+    
+    fig.update_layout(
+        title=dict(
+            text=f"Evolución: {titulo_metrica}",
+            font=dict(family=FONT_FAMILY, size=18, color='#0d3b66'),
+            x=0.5,
+            xanchor='center'
+        ),
+        xaxis=dict(
+            title=dict(text="Fecha", font=dict(family=FONT_FAMILY)),
+            showgrid=True,
+            gridcolor='#f0f0f0',
+            tickfont=dict(family=FONT_FAMILY)
+        ),
+        yaxis=yaxis_config,
+        height=600,
+        template="plotly_white",
+        font=dict(family=FONT_FAMILY),
+        hovermode='closest',
+        margin=dict(l=80, r=40, t=80, b=60),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(family=FONT_FAMILY, size=12)
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    
+    return dcc.Graph(figure=fig, config={"displayModeBar": False})
 
 
 def create_peso_vs_ideal_chart(df, player):

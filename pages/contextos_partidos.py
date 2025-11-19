@@ -3,6 +3,7 @@
 import dash
 from dash import html, dcc, Input, Output, State, callback
 import dash_bootstrap_components as dbc
+import pandas as pd
 import os
 
 def get_escudo_path(team_name):
@@ -271,27 +272,11 @@ def create_context_cell(matches, cell_title, cell_color):
     })
 
 
-def get_contextos_partidos_content():
+def get_matriz_contextos_content():
     """
-    Contenido principal de la página de Contextos de Partidos.
+    Contenido de la sub-sección Matriz de Contextos de Partidos.
     """
     return html.Div([
-        # Título
-        html.Div([
-            html.I(className="fas fa-th-large me-2", style={"fontSize": "24px", "color": "#1e3d59"}),
-            html.H4("Matriz de Contextos de Partidos", style={"color": "#1e3d59", "display": "inline"})
-        ], className="mb-3"),
-        
-        # Descripción
-        html.P([
-            "Clasificación de partidos según ",
-            html.Strong("resultado tipo"),
-            " (Positivo/Negativo) y ",
-            html.Strong("contexto tipo"),
-            " (Favorable/Desfavorable). ",
-            html.Span("Haz clic en un partido para ver detalles.", style={'fontStyle': 'italic', 'color': '#6c757d'})
-        ], className="text-muted mb-4"),
-        
         # Contenedor de la matriz
         html.Div(id='contextos-matrix-container', children=[
             # Mensaje de carga inicial
@@ -313,7 +298,193 @@ def get_contextos_partidos_content():
             )
         ], id='match-detail-modal', is_open=False, size='lg')
         
-    ], className="p-4")
+    ])
+
+
+def get_estilo_eficacia_ofensiva_content():
+    """
+    Contenido de la sub-sección Estilo - Eficacia Ofensiva.
+    """
+    return html.Div([
+        html.Div([
+            html.I(className="fas fa-chart-line me-2", style={"fontSize": "20px", "color": "#1e3d59"}),
+            html.H5("Estilo - Eficacia Ofensiva", style={"color": "#1e3d59", "display": "inline"})
+        ], className="mb-3"),
+        html.Div([
+            html.I(className="fas fa-hard-hat fa-3x mb-3", style={"color": "#ffc107"}),
+            html.H5("En Desarrollo", style={"color": "#6c757d"})
+        ], style={"textAlign": "center", "padding": "60px 20px"})
+    ])
+
+
+def get_estilo_eficacia_defensiva_content():
+    """
+    Contenido de la sub-sección Estilo - Eficacia Defensiva.
+    """
+    return html.Div([
+        html.Div([
+            html.I(className="fas fa-shield-alt me-2", style={"fontSize": "20px", "color": "#1e3d59"}),
+            html.H5("Estilo - Eficacia Defensiva", style={"color": "#1e3d59", "display": "inline"})
+        ], className="mb-3"),
+        html.Div([
+            html.I(className="fas fa-hard-hat fa-3x mb-3", style={"color": "#ffc107"}),
+            html.H5("En Desarrollo", style={"color": "#6c757d"})
+        ], style={"textAlign": "center", "padding": "60px 20px"})
+    ])
+
+
+def get_rendimiento_fisico_content():
+    """
+    Contenido de la sub-sección Rendimiento Físico.
+    """
+    return html.Div([
+        html.Div([
+            html.I(className="fas fa-running me-2", style={"fontSize": "20px", "color": "#1e3d59"}),
+            html.H5("Rendimiento Físico", style={"color": "#1e3d59", "display": "inline"})
+        ], className="mb-3"),
+        html.Div([
+            html.I(className="fas fa-hard-hat fa-3x mb-3", style={"color": "#ffc107"}),
+            html.H5("En Desarrollo", style={"color": "#6c757d"})
+        ], style={"textAlign": "center", "padding": "60px 20px"})
+    ])
+
+
+def get_rendimiento_balon_parado_content():
+    """
+    Contenido de la sub-sección Rendimiento Balón Parado.
+    """
+    return html.Div([
+        html.Div([
+            html.I(className="fas fa-futbol me-2", style={"fontSize": "20px", "color": "#1e3d59"}),
+            html.H5("Rendimiento Balón Parado", style={"color": "#1e3d59", "display": "inline"})
+        ], className="mb-3"),
+        html.Div([
+            html.I(className="fas fa-hard-hat fa-3x mb-3", style={"color": "#ffc107"}),
+            html.H5("En Desarrollo", style={"color": "#6c757d"})
+        ], style={"textAlign": "center", "padding": "60px 20px"})
+    ])
+
+
+def get_contextos_partidos_content():
+    """
+    Contenido principal de la página de Contextos de Partidos con navegación por sub-secciones.
+    """
+    return html.Div([
+        # Sub-navegación para Contextos Partidos
+        html.Div([
+            html.Div([
+                html.Button(
+                    "Matriz Contextos Partidos",
+                    id="subtab-ctx-matriz",
+                    className="subtab-button",
+                    style={
+                        "backgroundColor": "#1e3d59",
+                        "color": "white",
+                        "border": "none",
+                        "borderRadius": "6px",
+                        "padding": "10px 20px",
+                        "fontWeight": "600",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "marginRight": "10px",
+                        "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
+                        "minWidth": "220px"
+                    }
+                ),
+                html.Button(
+                    "Estilo - Eficacia Ofensiva",
+                    id="subtab-ctx-estilo-of",
+                    className="subtab-button",
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "color": "#6c757d",
+                        "border": "1px solid #e9ecef",
+                        "borderRadius": "6px",
+                        "padding": "10px 20px",
+                        "fontWeight": "500",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "marginRight": "10px",
+                        "minWidth": "220px"
+                    }
+                ),
+                html.Button(
+                    "Estilo - Eficacia Defensiva",
+                    id="subtab-ctx-estilo-def",
+                    className="subtab-button",
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "color": "#6c757d",
+                        "border": "1px solid #e9ecef",
+                        "borderRadius": "6px",
+                        "padding": "10px 20px",
+                        "fontWeight": "500",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "marginRight": "10px",
+                        "minWidth": "220px"
+                    }
+                ),
+                html.Button(
+                    "Rendimiento Físico",
+                    id="subtab-ctx-fisico",
+                    className="subtab-button",
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "color": "#6c757d",
+                        "border": "1px solid #e9ecef",
+                        "borderRadius": "6px",
+                        "padding": "10px 20px",
+                        "fontWeight": "500",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "marginRight": "10px",
+                        "minWidth": "200px"
+                    }
+                ),
+                html.Button(
+                    "Rendimiento Balón Parado",
+                    id="subtab-ctx-balon-parado",
+                    className="subtab-button",
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "color": "#6c757d",
+                        "border": "1px solid #e9ecef",
+                        "borderRadius": "6px",
+                        "padding": "10px 20px",
+                        "fontWeight": "500",
+                        "fontSize": "14px",
+                        "cursor": "pointer",
+                        "transition": "all 0.2s ease",
+                        "minWidth": "230px"
+                    }
+                )
+            ], style={
+                "display": "flex",
+                "justifyContent": "center",
+                "alignItems": "center",
+                "padding": "20px 0",
+                "borderBottom": "1px solid #e9ecef",
+                "flexWrap": "wrap",
+                "gap": "10px"
+            })
+        ], style={
+            "backgroundColor": "white",
+            "marginBottom": "20px"
+        }),
+        
+        # Contenido dinámico según sub-sección seleccionada
+        html.Div([
+            html.Div(
+                id="ctx-subtab-content",
+                children=get_matriz_contextos_content()  # Por defecto mostrar Matriz
+            )
+        ], className="p-4")
+    ])
 
 
 # Callback para cargar la matriz de contextos (solo carga inicial)
@@ -532,88 +703,192 @@ def toggle_match_modal(match_clicks, close_clicks, is_open, all_matches_data):
         if not match_info:
             return False, "", ""
         
-        # Construir título del modal
-        if match_info['condicion'] == 'Local':
-            title = f"RC Deportivo {match_info['goles_favor']}-{match_info['goles_contra']} {match_info['opponent_name']}"
-        else:
-            title = f"{match_info['opponent_name']} {match_info['goles_contra']}-{match_info['goles_favor']} RC Deportivo"
+        # Colores según resultado
+        resultado_colors = {
+            'Victoria': '#28a745',  # Verde
+            'Empate': '#ffc107',    # Amarillo
+            'Derrota': '#dc3545'    # Rojo
+        }
         
-        # Construir cuerpo del modal con explicación detallada
+        # Título del modal
+        title = html.Div([
+            html.Span(f"Jornada {match_info['match_day_number']} - ", style={'fontSize': '18px', 'fontWeight': '600'}),
+            html.Span(f"{match_info['opponent_name']}", style={'fontSize': '18px', 'fontWeight': '700', 'color': '#1e3d59'}),
+            html.Span(f" ({match_info['condicion']})", style={'fontSize': '16px', 'color': '#6c757d'})
+        ])
+        
+        # Cuerpo del modal
         body = html.Div([
-            # Resultado
+            # Información del partido
             html.Div([
-                html.H5("📊 Resultado del Partido", style={'color': '#1e3d59', 'marginBottom': '15px'}),
                 html.P([
-                    f"En este partido el resultado ha sido ",
-                    html.Strong(f"{match_info['resultado']}", style={
-                        'color': '#28a745' if match_info['resultado'] == 'Victoria' else '#dc3545' if match_info['resultado'] == 'Derrota' else '#ffc107'
-                    }),
-                    f" como {match_info['condicion'].lower()}."
-                ], style={'fontSize': '15px', 'lineHeight': '1.6'})
-            ], style={'marginBottom': '25px'}),
+                    html.Strong("Fecha: "),
+                    match_info['match_date'].strftime('%d/%m/%Y') if isinstance(match_info['match_date'], pd.Timestamp) else match_info['match_date']
+                ], style={'fontSize': '14px', 'marginBottom': '8px'}),
+                
+                html.P([
+                    html.Strong("Resultado: "),
+                    f"{match_info['goles_favor']} - {match_info['goles_contra']} ",
+                    html.Span(f"({match_info['resultado']})", style={
+                        'fontWeight': '600',
+                        'color': resultado_colors.get(match_info['resultado'], '#6c757d')
+                    })
+                ], style={'fontSize': '14px', 'marginBottom': '15px'})
+            ], style={'marginBottom': '20px'}),
             
-            # Explicación del resultado tipo
+            # Análisis del resultado
             html.Div([
-                html.H5("✅ Clasificación del Resultado", style={'color': '#1e3d59', 'marginBottom': '15px'}),
                 html.P([
-                    f"Este resultado se clasifica como ",
+                    html.Strong("Clasificación del Resultado", style={'color': '#1e3d59'})
+                ], style={'marginBottom': '8px'}),
+                
+                html.P([
+                    f"Resultado ",
+                    html.Strong(f"{match_info['resultado']}", style={
+                        'color': resultado_colors.get(match_info['resultado'], '#6c757d')
+                    }),
+                    f" como {match_info['condicion'].lower()} → Clasificación: ",
                     html.Strong(f"{match_info['resultado_tipo']}", style={
                         'color': '#28a745' if match_info['resultado_tipo'] == 'Positivo' else '#dc3545'
-                    }),
-                    f" porque ",
-                    html.Span(
-                        "las victorias siempre son positivas." if match_info['resultado'] == 'Victoria'
-                        else "las derrotas siempre son negativas." if match_info['resultado'] == 'Derrota'
-                        else f"los empates como {match_info['condicion'].lower()} se consideran {'positivos' if match_info['condicion'] == 'Visitante' else 'negativos'}."
-                    )
-                ], style={'fontSize': '15px', 'lineHeight': '1.6'})
-            ], style={'marginBottom': '25px', 'padding': '15px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'}),
+                    })
+                ], style={'fontSize': '14px', 'lineHeight': '1.6'})
+            ], style={'marginBottom': '20px'}),
             
-            # Contexto del marcador
+            # Análisis del contexto
             html.Div([
-                html.H5("⏱️ Contexto del Marcador", style={'color': '#1e3d59', 'marginBottom': '15px'}),
                 html.P([
-                    f"El contexto ha sido ",
+                    html.Strong("Contexto del Marcador", style={'color': '#1e3d59'})
+                ], style={'marginBottom': '8px'}),
+                
+                html.P([
+                    html.Strong("Ganando: "),
+                    f"{match_info['pct_ganando']:.1f}% | ",
+                    html.Strong("Empatando: "),
+                    f"{match_info['pct_empatando']:.1f}% | ",
+                    html.Strong("Perdiendo: "),
+                    f"{match_info['pct_perdiendo']:.1f}%"
+                ], style={'fontSize': '14px', 'marginBottom': '10px'}),
+                
+                html.P([
+                    f"Estados favorables: ",
+                    html.Strong(f"{match_info['pct_ganando'] + match_info['pct_empatando']:.1f}%", style={
+                        'color': '#28a745' if (match_info['pct_ganando'] + match_info['pct_empatando']) > match_info['pct_perdiendo'] else '#dc3545'
+                    }),
+                    f" | Estados desfavorables: ",
+                    html.Strong(f"{match_info['pct_perdiendo']:.1f}%", style={
+                        'color': '#dc3545' if match_info['pct_perdiendo'] > (match_info['pct_ganando'] + match_info['pct_empatando']) else '#28a745'
+                    })
+                ], style={'fontSize': '14px', 'marginBottom': '10px'}),
+                
+                html.P([
+                    f"Contexto: ",
                     html.Strong(f"{match_info['contexto_tipo']}", style={
                         'color': '#28a745' if match_info['contexto_tipo'] == 'Favorable' else '#dc3545'
                     }),
-                    f" al ir el equipo:"
-                ], style={'fontSize': '15px', 'lineHeight': '1.6', 'marginBottom': '10px'}),
-                
-                # Porcentajes de tiempo
-                html.Div([
-                    html.Div([
-                        html.Div([
-                            html.I(className="fas fa-arrow-up", style={'marginRight': '8px', 'color': '#28a745'}),
-                            html.Strong("Ganando: ", style={'color': '#28a745'}),
-                            html.Span(f"{match_info['pct_ganando']:.1f}% del tiempo")
-                        ], style={'marginBottom': '8px'}),
-                        
-                        html.Div([
-                            html.I(className="fas fa-equals", style={'marginRight': '8px', 'color': '#ffc107'}),
-                            html.Strong("Empatando: ", style={'color': '#ffc107'}),
-                            html.Span(f"{match_info['pct_empatando']:.1f}% del tiempo")
-                        ], style={'marginBottom': '8px'}),
-                        
-                        html.Div([
-                            html.I(className="fas fa-arrow-down", style={'marginRight': '8px', 'color': '#dc3545'}),
-                            html.Strong("Perdiendo: ", style={'color': '#dc3545'}),
-                            html.Span(f"{match_info['pct_perdiendo']:.1f}% del tiempo")
-                        ])
-                    ], style={'fontSize': '14px'})
-                ], style={'padding': '15px', 'backgroundColor': 'white', 'borderRadius': '6px', 'border': '1px solid #dee2e6'}),
-                
-                html.P([
-                    html.Br(),
-                    f"El equipo pasó la mayor parte del tiempo ",
-                    html.Strong(f"{match_info['contexto_preferente'].lower()}", style={
-                        'color': '#28a745' if match_info['contexto_preferente'] in ['Ganando', 'Empatando'] else '#dc3545'
-                    }),
-                    f", lo que genera un contexto {match_info['contexto_tipo'].lower()}."
-                ], style={'fontSize': '15px', 'lineHeight': '1.6', 'marginTop': '15px'})
-            ], style={'marginBottom': '25px'})
+                    f" (el equipo pasó ",
+                    html.Strong(
+                        f"{match_info['pct_ganando'] + match_info['pct_empatando']:.1f}% en estados favorables" 
+                        if (match_info['pct_ganando'] + match_info['pct_empatando']) > match_info['pct_perdiendo'] 
+                        else f"{match_info['pct_perdiendo']:.1f}% perdiendo"
+                    ),
+                    ")"
+                ], style={'fontSize': '14px', 'lineHeight': '1.6'})
+            ], style={'marginBottom': '20px'})
         ])
         
         return True, title, body
     
     return False, "", ""
+
+
+# Callback para actualizar las sub-pestañas de Contextos Partidos
+@callback(
+    [Output("subtab-ctx-matriz", "style"),
+     Output("subtab-ctx-estilo-of", "style"),
+     Output("subtab-ctx-estilo-def", "style"),
+     Output("subtab-ctx-fisico", "style"),
+     Output("subtab-ctx-balon-parado", "style"),
+     Output("ctx-subtab-content", "children")],
+    [Input("subtab-ctx-matriz", "n_clicks"),
+     Input("subtab-ctx-estilo-of", "n_clicks"),
+     Input("subtab-ctx-estilo-def", "n_clicks"),
+     Input("subtab-ctx-fisico", "n_clicks"),
+     Input("subtab-ctx-balon-parado", "n_clicks")]
+)
+def update_ctx_subtabs(n_matriz, n_estilo_of, n_estilo_def, n_fisico, n_balon_parado):
+    """
+    Actualiza las sub-pestañas de Contextos Partidos.
+    """
+    # Estilos
+    style_inactive = {
+        "backgroundColor": "#f8f9fa",
+        "color": "#6c757d",
+        "border": "1px solid #e9ecef",
+        "borderRadius": "6px",
+        "padding": "10px 20px",
+        "fontWeight": "500",
+        "fontSize": "12px",
+        "cursor": "pointer",
+        "transition": "all 0.2s ease",
+        "marginRight": "10px"
+    }
+    
+    style_active = {
+        "backgroundColor": "#1e3d59",
+        "color": "white",
+        "border": "none",
+        "borderRadius": "6px",
+        "padding": "10px 20px",
+        "fontWeight": "600",
+        "fontSize": "12px",
+        "cursor": "pointer",
+        "transition": "all 0.2s ease",
+        "marginRight": "10px",
+        "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
+    }
+    
+    # Detectar qué botón fue clickeado
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        active_subtab = 0  # Matriz por defecto
+    else:
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        if button_id == 'subtab-ctx-matriz':
+            active_subtab = 0
+        elif button_id == 'subtab-ctx-estilo-of':
+            active_subtab = 1
+        elif button_id == 'subtab-ctx-estilo-def':
+            active_subtab = 2
+        elif button_id == 'subtab-ctx-fisico':
+            active_subtab = 3
+        elif button_id == 'subtab-ctx-balon-parado':
+            active_subtab = 4
+        else:
+            active_subtab = 0
+    
+    # Establecer estilos (añadir minWidth específico para cada botón)
+    styles = [style_inactive.copy() for _ in range(5)]
+    styles[active_subtab] = style_active.copy()
+    
+    # Añadir minWidth específico
+    styles[0]["minWidth"] = "220px"
+    styles[1]["minWidth"] = "220px"
+    styles[2]["minWidth"] = "220px"
+    styles[3]["minWidth"] = "200px"
+    styles[4]["minWidth"] = "230px"
+    
+    # Establecer contenido
+    if active_subtab == 0:
+        content = get_matriz_contextos_content()
+    elif active_subtab == 1:
+        content = get_estilo_eficacia_ofensiva_content()
+    elif active_subtab == 2:
+        content = get_estilo_eficacia_defensiva_content()
+    elif active_subtab == 3:
+        content = get_rendimiento_fisico_content()
+    elif active_subtab == 4:
+        content = get_rendimiento_balon_parado_content()
+    else:
+        content = get_matriz_contextos_content()
+    
+    return styles[0], styles[1], styles[2], styles[3], styles[4], content

@@ -142,17 +142,18 @@ def get_team_anthropometry_timeseries(category: str = "Primer Equipo") -> pd.Dat
       - player_name (usando 'hoja' de la tabla)
       - fecha
       - kg_a_bajar, pct_grasa, sum_pliegues, peso
+      - peso_muscular (Lee) - calculado con fórmula
     """
     engine = get_soccersystem_engine()
     if engine is None:
         return pd.DataFrame(columns=[
-            "player_name", "fecha", "kg_a_bajar", "pct_grasa", "sum_pliegues", "peso"
+            "player_name", "fecha", "kg_a_bajar", "pct_grasa", "sum_pliegues", "peso", "peso_muscular"
         ])
 
     insp = inspect(engine)
     if "antropometria_pedrosa" not in set(insp.get_table_names()):
         return pd.DataFrame(columns=[
-            "player_name", "fecha", "kg_a_bajar", "pct_grasa", "sum_pliegues", "peso"
+            "player_name", "fecha", "kg_a_bajar", "pct_grasa", "sum_pliegues", "peso", "peso_muscular"
         ])
 
     try:
@@ -162,12 +163,12 @@ def get_team_anthropometry_timeseries(category: str = "Primer Equipo") -> pd.Dat
     except Exception as e:
         print(f"[ANTROPO][ERROR] Error al consultar antropometria_pedrosa por categoría: {e}")
         return pd.DataFrame(columns=[
-            "player_name", "fecha", "kg_a_bajar", "pct_grasa", "sum_pliegues", "peso"
+            "player_name", "fecha", "kg_a_bajar", "pct_grasa", "sum_pliegues", "peso", "peso_muscular"
         ])
 
     if df.empty:
         return pd.DataFrame(columns=[
-            "player_name", "fecha", "kg_a_bajar", "pct_grasa", "sum_pliegues", "peso"
+            "player_name", "fecha", "kg_a_bajar", "pct_grasa", "sum_pliegues", "peso", "peso_muscular"
         ])
 
     # Procesar los datos igual que antes pero sin necesidad de mapping
@@ -188,6 +189,14 @@ def get_team_anthropometry_timeseries(category: str = "Primer Equipo") -> pd.Dat
     # Columnas adicionales para suma de pliegues (6 pliegues total)
     muslo_anterior_col = _find_first_column(cols, ["muslo_anterior_media", "muslo_anterior", "muslo_ant_media"])
     pierna_medial_col = _find_first_column(cols, ["pierna_medial_media", "pierna_medial", "pierna_med_media"])
+    
+    # Columnas para cálculo de Peso Muscular (Lee)
+    talla_col = _find_first_column(cols, ["talla_cm", "talla", "altura_cm", "altura"])
+    pbc_col = _find_first_column(cols, ["pbc", "per_brazo_contraido", "perimetro_brazo"])
+    pmc_col = _find_first_column(cols, ["pmc", "per_muslo_contraido", "perimetro_muslo"])
+    ppc_col = _find_first_column(cols, ["ppc", "per_pierna_contraida", "perimetro_pierna"])
+    fecha_nacimiento_col = _find_first_column(cols, ["fecha_nacimiento", "nacimiento", "birth_date"])
+    raza_col = _find_first_column(cols, ["raza", "etnia", "race"])
 
     out = pd.DataFrame()
     out["player_name"] = df[hoja_col].astype(str).str.strip().str.upper()
@@ -224,6 +233,47 @@ def get_team_anthropometry_timeseries(category: str = "Primer Equipo") -> pd.Dat
         out["sum_pliegues"] = pd.to_numeric(df.get(sumpli_col), errors="coerce")
     
     out["peso"] = pd.to_numeric(df.get(peso_col), errors="coerce") if peso_col else None
+
+    # Calcular Peso Muscular (Lee) con fórmula
+    if talla_col and pbc_col and pmc_col and ppc_col and fecha_col and fecha_nacimiento_col:
+        talla = pd.to_numeric(df.get(talla_col), errors="coerce")
+        pbc = pd.to_numeric(df.get(pbc_col), errors="coerce")
+        pmc = pd.to_numeric(df.get(pmc_col), errors="coerce")
+        ppc = pd.to_numeric(df.get(ppc_col), errors="coerce")
+        
+        # Calcular edad desde fecha_nacimiento
+        fecha_medicion_dt = pd.to_datetime(df[fecha_col], errors="coerce")
+        fecha_nacimiento_dt = pd.to_datetime(df.get(fecha_nacimiento_col), errors="coerce")
+        edad = (fecha_medicion_dt - fecha_nacimiento_dt).dt.days / 365.25
+        
+        # Factor raza (caucásico=0, africano=1.1, asiático=-2.0)
+        def get_factor_raza(raza):
+            if pd.isna(raza):
+                return 0.0
+            raza_str = str(raza).strip().lower()
+            if 'african' in raza_str or 'africano' in raza_str:
+                return 1.1
+            elif 'asian' in raza_str or 'asiático' in raza_str or 'asiatico' in raza_str:
+                return -2.0
+            else:
+                return 0.0
+        
+        factor_raza = df.get(raza_col).apply(get_factor_raza) if raza_col else 0.0
+        
+        # Fórmula de Lee: ((talla_cm/100) * (0.00744*pbc² + 0.00088*pmc² + 0.00441*ppc²)) + 2.4 - 0.048*edad + factor_raza + 7.8
+        out["peso_muscular"] = (
+            ((talla.fillna(0) / 100) * 
+             (0.00744 * pbc.fillna(0)**2 + 
+              0.00088 * pmc.fillna(0)**2 + 
+              0.00441 * ppc.fillna(0)**2)) 
+            + 2.4 
+            - 0.048 * edad.fillna(0) 
+            + factor_raza 
+            + 7.8
+        )
+    else:
+        out["peso_muscular"] = None
+    
     if fecha_col and fecha_col in df.columns:
         out["fecha"] = pd.to_datetime(df[fecha_col], errors="coerce")
     else:

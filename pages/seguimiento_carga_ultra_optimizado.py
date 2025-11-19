@@ -362,28 +362,56 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
             if es_jugador_individual:
                 df_md_para_procesar = df_md_completo[df_md_completo['athlete_id'] == jugadores_ids[0]]
             else:
-                df_md_para_procesar = df_md_completo
+                # MODO EQUIPO: Filtrar solo jugadores con +70 minutos
+                df_md_para_procesar = df_md_completo[df_md_completo['field_time'] >= 4200]
             
             if not df_md_para_procesar.empty:
-                # Obtener valores REALES (sin estandarizar) para el gráfico
-                if metric_name == 'ritmo_medio':
-                    # Para ritmo: usar distance_per_minute directamente
-                    df_metrica_md = df_md_para_procesar.groupby('activity_tag').agg({
-                        'distance_per_minute': 'mean',
-                        'athlete_id': 'count',
-                        'activity_date': 'min',
-                        'field_time': 'mean'
-                    }).reset_index()
-                    df_metrica_md.columns = ['activity_tag', 'avg_metric', 'count_athletes', 'fecha', 'field_time']
+                # MODO EQUIPO: Estandarizar a 94 minutos (igual que máximos históricos)
+                # MODO JUGADOR: Usar valor real sin estandarizar
+                if es_jugador_individual:
+                    # JUGADOR INDIVIDUAL: Valor real sin estandarizar
+                    if metric_name == 'ritmo_medio':
+                        df_metrica_md = df_md_para_procesar.groupby('activity_tag').agg({
+                            'distance_per_minute': 'mean',
+                            'athlete_id': 'count',
+                            'activity_date': 'min',
+                            'field_time': 'mean'
+                        }).reset_index()
+                        df_metrica_md.columns = ['activity_tag', 'avg_metric', 'count_athletes', 'fecha', 'field_time']
+                    else:
+                        df_metrica_md = df_md_para_procesar.groupby('activity_tag').agg({
+                            col_name: 'mean',
+                            'athlete_id': 'count',
+                            'activity_date': 'min',
+                            'field_time': 'mean'
+                        }).reset_index()
+                        df_metrica_md.columns = ['activity_tag', 'avg_metric', 'count_athletes', 'fecha', 'field_time']
+                    print(f"✅ {metric_name} MD (JUGADOR): Valor REAL sin estandarizar")
                 else:
-                    # Para otras métricas: valor real sin estandarizar
-                    df_metrica_md = df_md_para_procesar.groupby('activity_tag').agg({
-                        col_name: 'mean',
-                        'athlete_id': 'count',
-                        'activity_date': 'min',
-                        'field_time': 'mean'
-                    }).reset_index()
-                    df_metrica_md.columns = ['activity_tag', 'avg_metric', 'count_athletes', 'fecha', 'field_time']
+                    # MODO EQUIPO: Estandarizar a 94 minutos
+                    if metric_name == 'ritmo_medio':
+                        # Para ritmo: usar distance_per_minute directamente (no se estandariza)
+                        df_metrica_md = df_md_para_procesar.groupby('activity_tag').agg({
+                            'distance_per_minute': 'mean',
+                            'athlete_id': 'count',
+                            'activity_date': 'min',
+                            'field_time': 'mean'
+                        }).reset_index()
+                        df_metrica_md.columns = ['activity_tag', 'avg_metric', 'count_athletes', 'fecha', 'field_time']
+                    else:
+                        # Para otras métricas: ESTANDARIZAR a 94 minutos
+                        # Crear columna estandarizada
+                        df_md_para_procesar_std = df_md_para_procesar.copy()
+                        df_md_para_procesar_std[f'{col_name}_std'] = df_md_para_procesar_std[col_name] * (5640.0 / df_md_para_procesar_std['field_time'])
+                        
+                        df_metrica_md = df_md_para_procesar_std.groupby('activity_tag').agg({
+                            f'{col_name}_std': 'mean',
+                            'athlete_id': 'count',
+                            'activity_date': 'min',
+                            'field_time': 'mean'
+                        }).reset_index()
+                        df_metrica_md.columns = ['activity_tag', 'avg_metric', 'count_athletes', 'fecha', 'field_time']
+                    print(f"✅ {metric_name} MD (EQUIPO): Filtrado +70' y estandarizado a 94'")
                 
                 # Combinar entrenamientos + MD
                 df_metrica = pd.concat([df_metrica_entrenos, df_metrica_md], ignore_index=True)
@@ -391,27 +419,6 @@ def cargar_microciclo_ultrarapido_v2(microciclo_id, jugadores_ids):
                 df_metrica = df_metrica_entrenos
         else:
             df_metrica = df_metrica_entrenos
-        
-        # IMPORTANTE: Filtrar solo jugadores con +70' para contar correctamente
-        # Pero NO estandarizar los valores del gráfico (mostrar valores REALES)
-        if metric_name in ['total_distance', 'distancia_21_kmh', 'distancia_24_kmh', 'acc_dec_total', 'ritmo_medio'] and not df_md_completo.empty:
-            # Filtrar jugadores con +70 mins en MD solo para contar
-            if es_jugador_individual:
-                df_md_filtrado = df_md_completo[
-                    (df_md_completo['athlete_id'] == jugadores_ids[0]) & 
-                    (df_md_completo['field_time'] >= 4200)
-                ]
-            else:
-                df_md_filtrado = df_md_completo[df_md_completo['field_time'] >= 4200]
-            
-            if not df_md_filtrado.empty:
-                count_filtrado = len(df_md_filtrado['athlete_id'].unique())
-                
-                # Solo actualizar el count, NO el valor (queremos el valor REAL en el gráfico)
-                mask_md = df_metrica['activity_tag'] == 'MD'
-                df_metrica.loc[mask_md, 'count_athletes'] = count_filtrado
-                
-                print(f"✅ {metric_name} MD: Mostrando valor REAL (sin estandarizar) en gráfico")
         
         datos_por_metrica[metric_name] = df_metrica
         # Métrica procesada
